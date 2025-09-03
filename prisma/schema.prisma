@@ -34,21 +34,21 @@ enum Role {
 }
 
 model Complaint {
-  id          Int      @id @default(autoincrement())
+  id          Int       @id @default(autoincrement())
   userId      Int
-  category    String
+  title       String
   description String
-  photoUrl    String?
-  location    Json
-  status      Status   @default(SUBMITTED)
-  flagged     Boolean  @default(false)
-  flagReason  String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  user        User     @relation(fields: [userId], references: [id])
+  category    String
+  urgency     String
+  location    Json?      // store locationData as JSON
+  photos      String[]   // array of Cloudinary URLs
+  timestamp   DateTime
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
   task        Task?
+  user User @relation(fields: [userId], references: [id])
 }
+
 
 enum Status {
   SUBMITTED
