@@ -1,0 +1,72 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String
+  role      Role     @default(RESIDENT)
+  name      String?
+  phone     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  complaints Complaint[]
+  tasks      Task[] @relation("TechnicianTasks")
+}
+
+enum Role {
+  RESIDENT
+  ADMIN
+  TECHNICIAN
+}
+
+model Complaint {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  category    String
+  description String
+  photoUrl    String?
+  location    Json
+  status      Status   @default(SUBMITTED)
+  flagged     Boolean  @default(false)
+  flagReason  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User     @relation(fields: [userId], references: [id])
+  task        Task?
+}
+
+enum Status {
+  SUBMITTED
+  ASSIGNED
+  IN_PROGRESS
+  RESOLVED
+  REJECTED
+}
+
+model Task {
+  id                  Int      @id @default(autoincrement())
+  complaintId         Int      @unique
+  technicianId        Int
+  assignedAt          DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  resolutionPhotoUrl  String?
+  resolutionNotes     String?
+
+  complaint           Complaint @relation(fields: [complaintId], references: [id])
+  technician          User      @relation("TechnicianTasks", fields: [technicianId], references: [id])
+}
