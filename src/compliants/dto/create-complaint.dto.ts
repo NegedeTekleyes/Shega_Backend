@@ -1,65 +1,46 @@
 // src/complaints/dto/create-complaint.dto.ts
-import { 
-  IsNotEmpty, 
-  IsString, 
-  IsOptional, 
-  IsArray, 
-  IsNumber, 
-  IsEnum,
-  ValidateNested,
-  IsLatitude,
-  IsLongitude,
-  IsISO8601
-} from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsString, IsNotEmpty, IsOptional, IsArray, IsNumber, IsEnum } from 'class-validator';
 
-class LocationDataDto {
+export class LocationDataDto {
   @IsNumber()
-  @IsNotEmpty()
-  @IsLatitude()
   latitude: number;
 
   @IsNumber()
-  @IsNotEmpty()
-  @IsLongitude()
   longitude: number;
 
-  @IsOptional()
   @IsString()
+  @IsOptional()
   address?: string;
 
-  @IsOptional()
   @IsNumber()
+  @IsOptional()
   accuracy?: number;
 }
 
 export class CreateComplaintDto {
-  @IsNotEmpty()
   @IsString()
+  @IsNotEmpty()
   title: string;
 
-  @IsNotEmpty()
   @IsString()
+  @IsNotEmpty()
   description: string;
 
-  @IsNotEmpty()
   @IsString()
+  @IsNotEmpty()
   category: string;
 
+  @IsString()
   @IsNotEmpty()
-  @IsEnum(['low', 'medium', 'high', 'emergency'])
-  urgency: 'low' | 'medium' | 'high' | 'emergency';
+  urgency: string;
 
-  @IsNotEmpty()
-  @ValidateNested()
-  @Type(() => LocationDataDto)
-  locationData: LocationDataDto;
+  @IsOptional()
+  locationData?: LocationDataDto;
 
   @IsArray()
   @IsOptional()
   photos?: string[];
 
   @IsOptional()
-  @IsISO8601()
   timestamp?: string;
 }
