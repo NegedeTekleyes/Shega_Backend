@@ -401,7 +401,7 @@ export class ReportsService {
   }
 
   private async getTechnicianMonthlyPerformance(technicianId: number, startDate: Date, endDate: Date) {
-    const tasks = await this.prisma.tasks.findMany({
+    const tasks = await this.prisma.task.findMany({
       where: {
         technicianId,
         assignedAt: {
