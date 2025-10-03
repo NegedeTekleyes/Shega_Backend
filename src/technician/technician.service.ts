@@ -1,16 +1,16 @@
 // src/technicians/technicians.service.ts
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { TechnicianStatus, Role } from '@prisma/client';
+import { TechnicianStatus, Role, Speciality } from '@prisma/client';
 
 interface CreateTechnicianDto {
   userId: number;
-  speciality: string;
+  speciality: Speciality;
   status?: TechnicianStatus;
 }
 
 interface UpdateTechnicianDto {
-  speciality?: string;
+  speciality?: Speciality;
   status?: TechnicianStatus;
 }
 
@@ -19,7 +19,11 @@ export class TechniciansService {
   constructor(private prisma: PrismaService) {}
 
   // Get all technicians with stats
-  async getAllTechnicians(page: number = 1, limit: number = 10, status?: string) {
+  async getAllTechnicians(
+    page: number = 1, 
+    limit: number = 10,
+     status?: string
+    ) {
     const skip = (page - 1) * limit;
     
     const where = status ? { status: status as TechnicianStatus } : {};
@@ -161,7 +165,7 @@ export class TechniciansService {
     return this.prisma.technician.create({
       data: {
         userId: userId,
-        speciality: speciality,
+        speciality: speciality || null,
         status: status || TechnicianStatus.ACTIVE,
       },
       include: {
