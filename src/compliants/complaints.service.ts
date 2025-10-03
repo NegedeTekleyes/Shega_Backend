@@ -2,7 +2,7 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateComplaintDto } from './dto/create-complaint.dto';
-import { ComplaintStatus, Priority } from '@prisma/client';
+import { ComplaintStatus, Priority, ComplaintCategory } from '@prisma/client';
 import { v2 as cloudinary } from 'cloudinary';
 import { ConfigService } from '@nestjs/config';
 
@@ -23,8 +23,6 @@ export class ComplaintsService {
     const apiKey = this.configService.get('CLOUDINARY_API_KEY');
     const apiSecret = this.configService.get('CLOUDINARY_API_SECRET');
 
-    this.logger.log(`Cloudinary config - Cloud: ${cloudName}, Key: ${apiKey ? 'SET' : 'MISSING'}, Secret: ${apiSecret ? 'SET' : 'MISSING'}`);
-
     if (cloudName && apiKey && apiSecret) {
       cloudinary.config({
         cloud_name: cloudName,
@@ -38,59 +36,33 @@ export class ComplaintsService {
     }
   }
 
-  // Helper to upload base64 image to Cloudinary
   private async uploadPhoto(photoUri: string): Promise<string | null> {
-    if (!this.cloudinaryConfigured) {
-      this.logger.warn('Cloudinary not configured, skipping photo upload');
-      return null;
-    }
+    if (!this.cloudinaryConfigured) return null;
 
     try {
-      this.logger.log('Attempting to upload photo to Cloudinary');
-      
-      // Remove the data:image/...;base64, prefix if present
       const base64Data = photoUri.replace(/^data:image\/\w+;base64,/, '');
-      
-      const result = await cloudinary.uploader.upload(`data:image/jpeg;base64,${base64Data}`, {
-        folder: 'shega-report',
-      });
-
-      this.logger.log(`Photo uploaded successfully: ${result.secure_url}`);
+      const result = await cloudinary.uploader.upload(
+        `data:image/jpeg;base64,${base64Data}`,
+        { folder: 'shega-report' }
+      );
       return result.secure_url;
     } catch (error: any) {
-      this.logger.error(`Failed to upload photo: ${error.message}`, error.stack);
+      this.logger.error(`Cloudinary upload failed: ${error.message}`);
       return null;
     }
   }
 
-  // CREATE - For residents to submit complaints
+  // CREATE - Submit complaint
   async create(userId: number, dto: CreateComplaintDto) {
-    this.logger.log(`Creating complaint for user ${userId}`);
-    this.logger.log(`Received ${dto.photos?.length || 0} photos`);
+    const photos: string[] = [];
 
-    let uploadPhotos: string[] = [];
-
-    if (dto.photos && dto.photos.length > 0) {
-      this.logger.log(`Processing ${dto.photos.length} photos`);
-      
-      // Upload photos sequentially for better debugging
+    if (dto.photos?.length) {
       for (let i = 0; i < dto.photos.length; i++) {
-        const photo = dto.photos[i];
-        this.logger.log(`Uploading photo ${i + 1}/${dto.photos.length}`);
-        
-        const uploadedUrl = await this.uploadPhoto(photo);
-        if (uploadedUrl) {
-          uploadPhotos.push(uploadedUrl);
-          this.logger.log(`Photo ${i + 1} uploaded successfully`);
-        } else {
-          this.logger.warn(`Photo ${i + 1} failed to upload`);
-        }
+        const url = await this.uploadPhoto(dto.photos[i]);
+        if (url) photos.push(url);
       }
-
-      this.logger.log(`Uploaded ${uploadPhotos.length}/${dto.photos.length} photos`);
     }
 
-    // Store location as JSON object
     const locationJson = {
       latitude: dto.locationData?.latitude,
       longitude: dto.locationData?.longitude,
@@ -98,58 +70,43 @@ export class ComplaintsService {
       accuracy: dto.locationData?.accuracy,
     };
 
-    try {
-      this.logger.log('Creating complaint in database...');
-      
-      const complaint = await this.prisma.complaint.create({
-        data: {
-          userId: userId,
-          title: dto.title,
-          description: dto.description,
-          category: dto.category,
-          urgency: dto.urgency,
-          location: locationJson,
-          photos: uploadPhotos,
-          timestamp: dto.timestamp ? new Date(dto.timestamp) : new Date(),
+    return this.prisma.complaint.create({
+      data: {
+        userId,
+        title: dto.title,
+        description: dto.description,
+        category: dto.category as ComplaintCategory,
+        urgency: dto.urgency as Priority,
+        location: locationJson,
+        photos,
+        timestamp: dto.timestamp ? new Date(dto.timestamp) : new Date(),
+      },
+      include: {
+        user: {
+          select: { id: true, name: true, email: true, phone: true },
         },
-      });
-
-      this.logger.log(`Complaint created successfully with ID: ${complaint.id}`);
-      return complaint;
-
-    } catch (error) {
-      this.logger.error('Database error creating complaint:', error);
-      throw error;
-    }
+        tasks: {
+          include: {
+            technician: { select: { user: { select: { id: true, name: true, email: true } } } },
+          },
+        },
+      },
+    });
   }
 
-  // READ - Get all complaints for admin dashboard
-  async getAllComplaints(page: number = 1, limit: number = 10, status?: string) {
+  // READ - All complaints with pagination
+  async getAllComplaints(page = 1, limit = 10, status?: ComplaintStatus) {
     const skip = (page - 1) * limit;
-    
-    const where = status ? { status: status as ComplaintStatus } : {};
-    
+    const where = status ? { status } : {};
+
     const [complaints, total] = await Promise.all([
       this.prisma.complaint.findMany({
         where,
         include: {
-          user: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              phone: true,
-            },
-          },
-          task: {
+          user: { select: { id: true, name: true, email: true, phone: true } },
+          tasks: {
             include: {
-              technician: {
-                select: {
-                  id: true,
-                  name: true,
-                  email: true,
-                },
-              },
+              technician: { select: { user: { select: { id: true, name: true, email: true } } } },
             },
           },
         },
@@ -160,89 +117,44 @@ export class ComplaintsService {
       this.prisma.complaint.count({ where }),
     ]);
 
-    return {
-      complaints,
-      pagination: {
-        page,
-        limit,
-        total,
-        pages: Math.ceil(total / limit),
-      },
-    };
+    return { complaints, pagination: { page, limit, total, pages: Math.ceil(total / limit) } };
   }
 
-  // READ - Get complaint by ID
+  // READ - Get single complaint by ID
   async getComplaintById(id: number) {
     const complaint = await this.prisma.complaint.findUnique({
       where: { id },
       include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            phone: true,
-          },
-        },
-        task: {
+        user: { select: { id: true, name: true, email: true, phone: true } },
+        tasks: {
           include: {
-            technician: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
-            },
+            technician: { select: { user: { select: { id: true, name: true, email: true, phone: true } } } },
           },
         },
       },
     });
 
-    if (!complaint) {
-      throw new NotFoundException(`Complaint with ID ${id} not found`);
-    }
-
+    if (!complaint) throw new NotFoundException(`Complaint with ID ${id} not found`);
     return complaint;
   }
 
-  // UPDATE - Update complaint status
+  // UPDATE - Complaint status
   async updateComplaintStatus(id: number, status: ComplaintStatus, adminNotes?: string) {
-    const complaint = await this.prisma.complaint.findUnique({
-      where: { id },
-    });
+    const complaint = await this.prisma.complaint.findUnique({ where: { id } });
+    if (!complaint) throw new NotFoundException(`Complaint with ID ${id} not found`);
 
-    if (!complaint) {
-      throw new NotFoundException(`Complaint with ID ${id} not found`);
-    }
-
-    const updateData: any = { status };
-    
-    if (status === 'RESOLVED') {
-      updateData.resolvedAt = new Date();
-    }
-    
-    if (adminNotes) {
-      updateData.adminNotes = adminNotes;
-    }
+    const data: any = { status };
+    if (status === 'RESOLVED') data.resolvedAt = new Date();
+    if (adminNotes) data.adminNotes = adminNotes;
 
     return this.prisma.complaint.update({
       where: { id },
-      data: updateData,
+      data,
       include: {
-        user: {
-          select: {
-            name: true,
-            email: true,
-          },
-        },
-        task: {
+        user: { select: { id: true, name: true, email: true } },
+        tasks: {
           include: {
-            technician: {
-              select: {
-                name: true,
-                email: true,
-              },
-            },
+            technician: { select: { user: { select: { id: true, name: true, email: true } } } },
           },
         },
       },
@@ -251,156 +163,80 @@ export class ComplaintsService {
 
   // UPDATE - Assign technician to complaint
   async assignTechnician(complaintId: number, technicianId: number) {
-    const complaint = await this.prisma.complaint.findUnique({
-      where: { id: complaintId },
+    const complaint = await this.prisma.complaint.findUnique({ where: { id: complaintId } });
+    if (!complaint) throw new NotFoundException(`Complaint with ID ${complaintId} not found`);
+
+    const technician = await this.prisma.technician.findUnique({
+      where: { userId: technicianId },
+      include: { user: true },
     });
 
-    if (!complaint) {
-      throw new NotFoundException(`Complaint with ID ${complaintId} not found`);
-    }
-
-    const technician = await this.prisma.user.findFirst({
-      where: {
-        id: technicianId,
-        role: 'TECHNICIAN',
-        technician: {
-          status: 'ACTIVE',
-        },
-      },
-    });
-
-    if (!technician) {
+    if (!technician || technician.status !== 'ACTIVE')
       throw new NotFoundException(`Active technician with ID ${technicianId} not found`);
-    }
 
-    // Create or update task
-    return this.prisma.task.upsert({
-      where: { complaintId },
-      update: {
-        technicianId,
-        assignedAt: new Date(),
-      },
-      create: {
-        complaintId,
-        technicianId,
-        assignedAt: new Date(),
-      },
-      include: {
-        technician: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
+    // Find existing task for this complaint
+    const existingTask = await this.prisma.task.findFirst({ where: { complaintId } });
+
+    if (existingTask) {
+      return this.prisma.task.update({
+        where: { id: existingTask.id },
+        data: { technicianId, assignedAt: new Date() },
+        include: {
+          technician: { select: { user: { select: { id: true, name: true, email: true } } } },
+          complaint: { include: { user: true } },
         },
-        complaint: {
-          include: {
-            user: {
-              select: {
-                name: true,
-                email: true,
-              },
-            },
-          },
+      });
+    } else {
+      return this.prisma.task.create({
+        data: { complaintId, technicianId, assignedAt: new Date() },
+        include: {
+          technician: { select: { user: { select: { id: true, name: true, email: true } } } },
+          complaint: { include: { user: true } },
         },
-      },
-    });
+      });
+    }
   }
 
-  // DELETE - Delete complaint
+  // DELETE - Complaint
   async deleteComplaint(id: number) {
-    const complaint = await this.prisma.complaint.findUnique({
-      where: { id },
-    });
-
-    if (!complaint) {
-      throw new NotFoundException(`Complaint with ID ${id} not found`);
-    }
-
-    // Delete related task first (if exists)
-    await this.prisma.task.deleteMany({
-      where: { complaintId: id },
-    });
-
-    // Then delete complaint
-    return this.prisma.complaint.delete({
-      where: { id },
-    });
+    await this.prisma.task.deleteMany({ where: { complaintId: id } });
+    return this.prisma.complaint.delete({ where: { id } });
   }
 
-  // Get complaint statistics
+  // GET - Complaint stats
   async getComplaintStats() {
-    const [
-      total,
-      submitted,
-      assigned,
-      inProgress,
-      resolved,
-      rejected,
-    ] = await Promise.all([
-      this.prisma.complaint.count(),
-      this.prisma.complaint.count({ where: { status: 'SUBMITTED' } }),
-      this.prisma.complaint.count({ where: { status: 'ASSIGNED' } }),
-      this.prisma.complaint.count({ where: { status: 'IN_PROGRESS' } }),
-      this.prisma.complaint.count({ where: { status: 'RESOLVED' } }),
-      this.prisma.complaint.count({ where: { status: 'REJECTED' } }),
-    ]);
+    const statuses: ComplaintStatus[] = ['SUBMITTED', 'ASSIGNED', 'IN_PROGRESS', 'RESOLVED', 'REJECTED'];
+    const counts = await Promise.all(statuses.map(s => this.prisma.complaint.count({ where: { status: s } })));
+    const total = counts.reduce((sum, c) => sum + c, 0);
 
     return {
       total,
-      byStatus: {
-        submitted,
-        assigned,
-        inProgress,
-        resolved,
-        rejected,
-      },
+      byStatus: statuses.reduce((obj, status, i) => ({ ...obj, [status.toLowerCase()]: counts[i] }), {}),
     };
   }
 
-  // Get complaints by user (for residents)
+  // Get complaints for a specific user
   async findAllByUser(userId: number) {
     return this.prisma.complaint.findMany({
       where: { userId },
       include: {
-        task: {
-          include: {
-            technician: {
-              select: {
-                name: true,
-                email: true,
-              },
-            },
-          },
+        tasks: {
+          include: { technician: { select: { user: { select: { id: true, name: true, email: true } } } } },
         },
       },
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  // Get single complaint by user (for residents)
   async findOneByUser(id: number, userId: number) {
     const complaint = await this.prisma.complaint.findFirst({
       where: { id, userId },
       include: {
-        task: {
-          include: {
-            technician: {
-              select: {
-                name: true,
-                email: true,
-                phone: true,
-              },
-            },
-          },
-        },
+        tasks: { include: { technician: { select: { user: { select: { id: true, name: true, email: true, phone: true } } } } } },
       },
     });
 
-    if (!complaint) {
-      throw new NotFoundException(`Complaint with ID ${id} not found`);
-    }
-
+    if (!complaint) throw new NotFoundException(`Complaint with ID ${id} not found`);
     return complaint;
   }
 }
