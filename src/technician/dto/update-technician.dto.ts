@@ -1,10 +1,11 @@
 import { IsString, IsOptional, IsEnum } from 'class-validator';
-import { TechnicianStatus } from '@prisma/client';
+import { Speciality, TechnicianStatus } from '@prisma/client';
 
 export class UpdateTechnicianDto {
-  @IsString()
-  @IsOptional()
-  speciality?: string;
+
+   @IsEnum(Speciality)  
+   @IsOptional()
+  speciality: Speciality;
 
   @IsEnum(TechnicianStatus)
   @IsOptional()
