@@ -1,4 +1,5 @@
 // src/complaints/dto/create-complaint.dto.ts
+import { ComplaintCategory, Priority } from '@prisma/client';
 import { IsString, IsNotEmpty, IsOptional, IsArray, IsNumber, IsEnum } from 'class-validator';
 
 export class LocationDataDto {
@@ -26,13 +27,11 @@ export class CreateComplaintDto {
   @IsNotEmpty()
   description: string;
 
-  @IsString()
-  @IsNotEmpty()
-  category: string;
+  @IsEnum(ComplaintCategory)
+  category: ComplaintCategory
 
-  @IsString()
-  @IsNotEmpty()
-  urgency: string;
+ @IsEnum(Priority)
+ urgency: Priority
 
   @IsOptional()
   locationData?: LocationDataDto;
