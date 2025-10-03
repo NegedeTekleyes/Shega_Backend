@@ -31,7 +31,7 @@ export class ComplaintsController {
   async getAllComplaints(
     @Query('page') page: string = '1',
     @Query('limit') limit: string = '10',
-    @Query('status') status?: string,
+    @Query('status') status?: ComplaintStatus,
   ) {
     return this.complaintsService.getAllComplaints(
       parseInt(page),
