@@ -208,45 +208,69 @@ export class AnalyticsService {
   }
 
   // Get top performing technicians
-  async getTopTechnicians(limit: number = 3): Promise<TechnicianPerformance[]> {
-    // Get technicians with their completed tasks
+  // Get top performing technicians
+async getTopTechnicians(limit: number = 3): Promise<TechnicianPerformance[]> {
+  try {
+    // Get technicians with their tasks and complaint data
     const technicians = await this.prisma.technician.findMany({
       where: { status: 'ACTIVE' },
       include: {
         user: {
-          select: { name: true },
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
+        },
+        tasks: {
           include: {
-            tasks: {
-              include: {
-                complaint: true
+            complaint: {
+              select: {
+                id: true,
+                status: true,
+                createdAt: true,
+                resolvedAt: true,
+                title: true
               }
             }
           }
-        },
-        // user: {
-          
-        // }
+        }
       }
     });
 
     const performanceData = technicians.map(tech => {
-      const completedTasks = tech.user.tasks.filter(task => 
-        task.complaint.status === 'RESOLVED'
+      // Handle case where user might be null
+      if (!tech.user) {
+        return {
+          name: 'Unknown Technician',
+          completed: 0,
+          efficiency: '0%',
+          avgTime: 'N/A'
+        };
+      }
+
+      // Filter completed tasks (RESOLVED complaints)
+      const completedTasks = tech.tasks.filter(task => 
+        task.complaint?.status === 'RESOLVED'
       );
       
-      const totalTasks = tech.user.tasks.length;
+      const totalTasks = tech.tasks.length;
       const efficiency = totalTasks > 0 ? (completedTasks.length / totalTasks) * 100 : 0;
 
-      // Calculate average resolution time (simplified)
-      let avgResolutionTime = '24h';
+      // Calculate average resolution time
+      let avgResolutionTime = 'N/A';
       if (completedTasks.length > 0) {
         const totalHours = completedTasks.reduce((sum, task) => {
-          const resolutionTime = task.complaint.resolvedAt 
-            ? (task.complaint.resolvedAt.getTime() - task.complaint.createdAt.getTime()) / (1000 * 60 * 60)
-            : 24;
-          return sum + resolutionTime;
+          if (!task.complaint?.resolvedAt || !task.complaint?.createdAt) {
+            return sum + 24; // Default 24 hours if dates are missing
+          }
+          const resolutionTime = (task.complaint.resolvedAt.getTime() - task.complaint.createdAt.getTime()) / (1000 * 60 * 60);
+          return sum + Math.max(0, resolutionTime); // Ensure non-negative
         }, 0);
-        avgResolutionTime = `${Math.round(totalHours / completedTasks.length)}h`;
+        const avgHours = totalHours / completedTasks.length;
+        avgResolutionTime = avgHours < 1 ? 
+          `${Math.round(avgHours * 60)}m` : 
+          `${Math.round(avgHours)}h`;
       }
 
       return {
@@ -259,9 +283,15 @@ export class AnalyticsService {
 
     // Sort by completed tasks and return top performers
     return performanceData
+      .filter(tech => tech.completed > 0) // Only include technicians with completed tasks
       .sort((a, b) => b.completed - a.completed)
       .slice(0, limit);
+  } catch (error) {
+    console.error('Error in getTopTechnicians:', error);
+    // Return empty array instead of throwing to prevent breaking the dashboard
+    return [];
   }
+}
 
   // Get comprehensive analytics data for the entire dashboard
   async getComprehensiveAnalytics(days: number = 30) {
