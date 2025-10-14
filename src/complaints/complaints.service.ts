@@ -55,6 +55,15 @@ export class ComplaintsService {
   // CREATE - Submit complaint
   async create(userId: number, dto: CreateComplaintDto) {
     try {
+      // Validate user exists
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId }
+      });
+      
+      if (!user) {
+        throw new BadRequestException('User not found');
+      }
+
       // Validate required fields
       if (!dto.title?.trim()) {
         throw new BadRequestException('Title is required');
@@ -78,26 +87,25 @@ export class ComplaintsService {
 
       // Upload photos if provided
       if (dto.photos?.length) {
+        this.logger.log(`Uploading ${dto.photos.length} photos for user ${userId}`);
         for (let i = 0; i < dto.photos.length; i++) {
           const url = await this.uploadPhoto(dto.photos[i]);
           if (url) photos.push(url);
         }
+        this.logger.log(`Successfully uploaded ${photos.length} photos`);
       }
 
-      let LocationData: Prisma.InputJsonValue | undefined
+      // FIXED: Location data handling
+      let locationData: Prisma.InputJsonValue | undefined;
 
-      if(dto.locationData) {
-        LocationData = {
+      if (dto.locationData) {
+        locationData = {
           latitude: dto.locationData.latitude,
           longitude: dto.locationData.longitude,
           address: dto.locationData.address || null,
           accuracy: dto.locationData.accuracy || null,
-
-        } as Prisma.InputJsonValue
-      } else {
-        // LocationData = Prisma.DbNull
+        } as Prisma.InputJsonValue;
       }
-
 
       // Map urgency with validation
       const urgencyMap: { [key: string]: Priority } = {
@@ -110,21 +118,20 @@ export class ComplaintsService {
       const urgency = urgencyMap[dto.urgency] || Priority.MEDIUM;
 
       // Create the complaint
-      return await this.prisma.complaint.create({
+      const complaint = await this.prisma.complaint.create({
         data: {
           userId,
           title: dto.title.trim(),
           description: dto.description.trim(),
           category: dto.category as ComplaintCategory,
           urgency: urgency,
-          location: LocationData,
+          location: locationData,
           photos,
-          status: ComplaintStatus.SUBMITTED, // Set initial status
-          // Let Prisma handle createdAt automatically
+          status: ComplaintStatus.SUBMITTED,
         },
         include: {
           user: {
-            select: { id: true, name: true, email: true, phone: true },
+            select: { id: true, name: true, email: true },
           },
           tasks: {
             include: {
@@ -139,8 +146,12 @@ export class ComplaintsService {
           },
         },
       });
+
+      this.logger.log(`Complaint created successfully: ID ${complaint.id} for user ${userId}`);
+      return complaint;
+
     } catch (error) {
-      this.logger.error(`Error creating complaint: ${error.message}`);
+      this.logger.error(`Error creating complaint for user ${userId}: ${error.message}`);
       if (error instanceof BadRequestException) {
         throw error;
       }
@@ -157,7 +168,7 @@ export class ComplaintsService {
       this.prisma.complaint.findMany({
         where,
         include: {
-          user: { select: { id: true, name: true, email: true, phone: true } },
+          user: { select: { id: true, name: true, email: true} },
           tasks: {
             include: {
               technician: { 
@@ -191,12 +202,12 @@ export class ComplaintsService {
     const complaint = await this.prisma.complaint.findUnique({
       where: { id },
       include: {
-        user: { select: { id: true, name: true, email: true, phone: true } },
+        user: { select: { id: true, name: true, email: true} },
         tasks: {
           include: {
             technician: { 
               include: { 
-                user: { select: { id: true, name: true, email: true, phone: true } } 
+                user: { select: { id: true, name: true, email: true} } 
               } 
             },
           },
@@ -219,7 +230,7 @@ export class ComplaintsService {
 
     const data: any = { 
       status,
-      updatedAt: new Date() // Always update the updatedAt field
+      updatedAt: new Date()
     };
     
     if (status === ComplaintStatus.RESOLVED) {
@@ -260,7 +271,7 @@ export class ComplaintsService {
 
     // Verify technician exists and is active
     const technician = await this.prisma.technician.findUnique({
-      where: { id: technicianId }, // FIX: Use technician id, not userId
+      where: { id: technicianId }, 
       include: { user: true },
     });
 
@@ -370,7 +381,6 @@ export class ComplaintsService {
         ...obj, 
         [status.toLowerCase()]: counts[index] 
       }), {}),
-      // Add additional stats
       recentCount: await this.prisma.complaint.count({
         where: {
           createdAt: {
@@ -389,7 +399,7 @@ export class ComplaintsService {
       this.prisma.complaint.findMany({
         where: { userId },
         include: {
-          user: { select: { id: true, name: true, email: true, phone: true } },
+          user: { select: { id: true, name: true, email: true} },
           tasks: {
             include: { 
               technician: { 
@@ -423,12 +433,12 @@ export class ComplaintsService {
     const complaint = await this.prisma.complaint.findFirst({
       where: { id, userId },
       include: {
-        user: { select: { id: true, name: true, email: true, phone: true } },
+        user: { select: { id: true, name: true, email: true} },
         tasks: { 
           include: { 
             technician: { 
               include: { 
-                user: { select: { id: true, name: true, email: true, phone: true } } 
+                user: { select: { id: true, name: true, email: true} } 
               } 
             } 
           } 
@@ -442,7 +452,7 @@ export class ComplaintsService {
     return complaint;
   }
 
-  // NEW: Get assigned complaints for a technician
+  // Get assigned complaints for a technician
   async findAssignedComplaints(technicianUserId: number, page: number = 1, limit: number = 10) {
     const skip = (page - 1) * limit;
 
@@ -458,7 +468,7 @@ export class ComplaintsService {
           },
         },
         include: {
-          user: { select: { id: true, name: true, email: true, phone: true } },
+          user: { select: { id: true, name: true, email: true} },
           tasks: {
             where: {
               technician: {
