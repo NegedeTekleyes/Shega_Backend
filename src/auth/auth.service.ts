@@ -315,7 +315,7 @@ export class AuthService {
     }
 
     // In production, implement actual email sending
-    // await this.emailService.sendPasswordResetEmail(email, resetToken);
+    await this.emailService.sendPasswordResetEmail(email, resetToken);
     console.log(`Reset email would be sent to: ${email}`);
   }
 
@@ -355,7 +355,7 @@ export class AuthService {
     
     return {
       access_token: this.jwtService.sign(payload, {
-        expiresIn: '7d', // Token expiry - adjust as needed
+        expiresIn: '7d', // Token expiry 
       }),
       user: {
         id: user.id,
