@@ -394,7 +394,7 @@ export class ComplaintsService {
   // Get complaints for a specific user with pagination
   async findAllByUser(userId: number, page: number = 1, limit: number = 10) {
     const skip = (page - 1) * limit;
-
+ 
     const [complaints, total] = await Promise.all([
       this.prisma.complaint.findMany({
         where: { userId },
