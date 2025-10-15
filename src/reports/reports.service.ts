@@ -1,7 +1,7 @@
 // src/reports/reports.service.ts
-import { Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import { Injectable, InternalServerErrorException, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { ReportType, Role } from '@prisma/client';
+import { ReportType, Role, TechnicianStatus, ComplaintStatus, ComplaintCategory } from '@prisma/client';
 
 interface CreateReportDto {
   title: string;
@@ -9,15 +9,35 @@ interface CreateReportDto {
   filters: any;
   generatedBy: number;
 }
+
 interface FormattedTechnicianData {
   id: number;
   name: string | null;
   email: string;
   speciality?: string | null;
+  status: TechnicianStatus | null;
   totalTasks: number;
   completedTasks: number;
   efficiency: number;
 }
+
+interface FinancialReportData {
+  period: { start: Date; end: Date };
+  revenue: {
+    total: number;
+    byService: Array<{ category: ComplaintCategory; amount: number }>;
+  };
+  expenses: {
+    total: number;
+    categories: Array<{ name: string; amount: number }>;
+  };
+  profitability: {
+    netProfit: number;
+    margin: number;
+  };
+  generatedAt: Date;
+}
+
 @Injectable()
 export class ReportsService {
   constructor(private prisma: PrismaService) {}
@@ -25,7 +45,10 @@ export class ReportsService {
   // Generate comprehensive analytics report
   async generateAnalyticsReport(startDate: Date, endDate: Date, generatedBy: number) {
     try {
-      // Get complaints statistics
+      // Validate date range
+      this.validateDateRange(startDate, endDate);
+
+      // Get complaints statistics grouped by status & category
       const complaintsStats = await this.prisma.complaint.groupBy({
         by: ['status', 'category'],
         where: {
@@ -39,76 +62,13 @@ export class ReportsService {
         },
       });
 
-      // Calculate average resolution time manually
-      const resolvedComplaints = await this.prisma.complaint.findMany({
-        where: {
-          status: 'RESOLVED',
-          resolvedAt: {
-            gte: startDate,
-            lte: endDate,
-          },
-        },
-        select: {
-          createdAt: true,
-          resolvedAt: true,
-        },
-      });
+      // Calculate average resolution time
+      const resolutionMetrics = await this.calculateResolutionMetrics(startDate, endDate);
 
-      const totalResolutionTime = resolvedComplaints.reduce((total, complaint) => {
-        if (complaint.resolvedAt && complaint.createdAt) {
-          return total + (complaint.resolvedAt.getTime() - complaint.createdAt.getTime());
-        }
-        return total;
-      }, 0);
+      // Get technician performance - FIXED: Query through Technician model instead of User
+      const technicianPerformance = await this.getTechnicianPerformance(startDate, endDate);
 
-      const averageResolutionTime = resolvedComplaints.length > 0 
-        ? totalResolutionTime / resolvedComplaints.length / (1000 * 60 * 60 * 24) // Convert to days
-        : 0;
-
-      // Get technician performance
-      const technicianPerformance = await this.prisma.user.findMany({
-        where: {
-          role: 'TECHNICIAN',
-          tasks: {
-            some: {
-              complaint: {
-                createdAt: {
-                  gte: startDate,
-                  lte: endDate,
-                },
-              },
-            },
-          },
-        },
-        include: {
-          tasks: {
-            include: {
-              complaint: true,
-            },
-          },
-          technician: true,
-        },
-      });
-
-      const formattedTechnicianData: FormattedTechnicianData[] = technicianPerformance.map(tech => {
-        const completedTasks = tech.tasks.filter(task => 
-          task.complaint.status === 'RESOLVED'
-        );
-        const totalTasks = tech.tasks.length;
-        const efficiency = totalTasks > 0 ? (completedTasks.length / totalTasks) * 100 : 0;
-
-        return {
-          id: tech.id,
-          name: tech.name,
-          email: tech.email,
-          speciality: tech.technician?.speciality,
-          totalTasks,
-          completedTasks: completedTasks.length,
-          efficiency: Math.round(efficiency),
-        };
-      });
-
-      // Get category-wise analysis
+      // Category-wise analysis
       const categoryAnalysis = await this.prisma.complaint.groupBy({
         by: ['category'],
         where: {
@@ -125,6 +85,20 @@ export class ReportsService {
       // Get trend data (monthly)
       const monthlyTrends = await this.getMonthlyTrends(startDate, endDate);
 
+      // Urgency distribution
+      const urgencyDistribution = await this.prisma.complaint.groupBy({
+        by: ['urgency'],
+        where: {
+          createdAt: {
+            gte: startDate,
+            lte: endDate,
+          },
+        },
+        _count: {
+          id: true,
+        },
+      });
+
       return {
         period: {
           start: startDate,
@@ -133,16 +107,19 @@ export class ReportsService {
         summary: {
           totalComplaints: complaintsStats.reduce((sum, item) => sum + item._count.id, 0),
           resolvedComplaints: complaintsStats
-            .filter(item => item.status === 'RESOLVED')
+            .filter(item => item.status === ComplaintStatus.RESOLVED)
             .reduce((sum, item) => sum + item._count.id, 0),
           activeTechnicians: technicianPerformance.length,
-          averageResolutionTime: Math.round(averageResolutionTime * 100) / 100,
+          averageResolutionTime: resolutionMetrics.averageResolutionTime,
+          resolutionRate: resolutionMetrics.resolutionRate,
         },
         complaintsByStatus: this.formatGroupedData(complaintsStats, 'status'),
         complaintsByCategory: this.formatGroupedData(complaintsStats, 'category'),
-        technicianPerformance: formattedTechnicianData,
+        complaintsByUrgency: this.formatGroupedData(urgencyDistribution, 'urgency'),
+        technicianPerformance,
         categoryAnalysis,
         monthlyTrends,
+        resolutionMetrics,
         generatedAt: new Date(),
       };
     } catch (error) {
@@ -151,15 +128,22 @@ export class ReportsService {
     }
   }
 
-  // Generate technician performance report
+  // Generate technician performance report - FIXED
   async generateTechnicianReport(technicianId: number, startDate: Date, endDate: Date, generatedBy: number) {
-    const technician = await this.prisma.user.findUnique({
-      where: {
-        id: technicianId,
-        role: 'TECHNICIAN',
-      },
+    this.validateDateRange(startDate, endDate);
+
+    // Find technician by technicianId (not userId) and include user data
+    const technician = await this.prisma.technician.findUnique({
+      where: { id: technicianId },
       include: {
-        technician: true,
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+          },
+        },
         tasks: {
           where: {
             assignedAt: {
@@ -186,36 +170,28 @@ export class ReportsService {
       throw new NotFoundException('Technician not found');
     }
 
-    const completedTasks = technician.tasks.filter(task => 
-      task.complaint.status === 'RESOLVED'
+    const tasksArr = technician.tasks ?? [];
+
+    const completedTasks = tasksArr.filter(task =>
+      task.complaint?.status === ComplaintStatus.RESOLVED
     );
-    const inProgressTasks = technician.tasks.filter(task => 
-      task.complaint.status === 'IN_PROGRESS'
+    const inProgressTasks = tasksArr.filter(task =>
+      task.complaint?.status === ComplaintStatus.IN_PROGRESS
     );
 
     // Calculate various metrics
-    const totalTasks = technician.tasks.length;
+    const totalTasks = tasksArr.length;
     const completionRate = totalTasks > 0 ? (completedTasks.length / totalTasks) * 100 : 0;
 
-    // Calculate average resolution time
-    const totalResolutionTime = completedTasks.reduce((total, task) => {
-      if (task.complaint.resolvedAt && task.complaint.createdAt) {
-        const resolutionTime = task.complaint.resolvedAt.getTime() - task.complaint.createdAt.getTime();
-        return total + resolutionTime;
-      }
-      return total;
-    }, 0);
-
-    const avgResolutionTime = completedTasks.length > 0 
-      ? totalResolutionTime / completedTasks.length / (1000 * 60 * 60) // Convert to hours
-      : 0;
+    // Calculate average resolution time (hours)
+    const resolutionMetrics = this.calculateTaskResolutionMetrics(completedTasks);
 
     // Category distribution
     const categoryDistribution = await this.prisma.complaint.groupBy({
       by: ['category'],
       where: {
-        task: {
-          is: {
+        tasks: {
+          some: {
             technicianId: technicianId,
           },
         },
@@ -232,13 +208,18 @@ export class ReportsService {
     // Monthly performance
     const monthlyPerformance = await this.getTechnicianMonthlyPerformance(technicianId, startDate, endDate);
 
+    // Response time analysis (time from complaint creation to task assignment)
+    const responseTimeMetrics = await this.calculateResponseTimeMetrics(technicianId, startDate, endDate);
+
     return {
       technician: {
         id: technician.id,
-        name: technician.name,
-        email: technician.email,
-        speciality: technician.technician?.speciality,
-        status: technician.technician?.status,
+        userId: technician.user.id,
+        name: technician.user.name,
+        email: technician.user.email,
+        phone: technician.user.phone,
+        speciality: technician.speciality,
+        status: technician.status,
       },
       period: {
         start: startDate,
@@ -248,41 +229,77 @@ export class ReportsService {
         totalTasks,
         completedTasks: completedTasks.length,
         inProgressTasks: inProgressTasks.length,
-        completionRate: Math.round(completionRate),
-        averageResolutionTime: Math.round(avgResolutionTime * 100) / 100,
-        efficiency: Math.round(completionRate), // Could be different calculation
+        pendingTasks: totalTasks - completedTasks.length - inProgressTasks.length,
+        completionRate: Math.round(completionRate * 100) / 100, // Keep decimals
+        averageResolutionTime: resolutionMetrics.averageResolutionTime,
+        efficiency: Math.round(completionRate),
+        averageResponseTime: responseTimeMetrics.averageResponseTime,
       },
       categoryDistribution,
       monthlyPerformance,
+      responseTimeMetrics,
       recentTasks: completedTasks.slice(0, 10).map(task => ({
-        id: task.complaint.id,
-        title: task.complaint.title,
-        category: task.complaint.category,
+        id: task.id,
+        complaintId: task.complaint?.id,
+        title: task.complaint?.title,
+        category: task.complaint?.category,
         assignedAt: task.assignedAt,
-        resolvedAt: task.complaint.resolvedAt,
-        user: task.complaint.user.name,
+        resolvedAt: task.complaint?.resolvedAt,
+        user: task.complaint?.user?.name ?? 'Unknown',
+        resolutionTime: task.complaint?.resolvedAt && task.complaint?.createdAt 
+          ? (task.complaint.resolvedAt.getTime() - task.complaint.createdAt.getTime()) / (1000 * 60 * 60 * 24) // days
+          : null,
       })),
       generatedAt: new Date(),
     };
   }
 
-  // Generate financial report (if you have payment data)
-  async generateFinancialReport(startDate: Date, endDate: Date, generatedBy: number) {
-    // This would depend on your business model
-    // Placeholder for financial metrics
+  // Enhanced financial report with actual data
+  async generateFinancialReport(startDate: Date, endDate: Date, generatedBy: number): Promise<FinancialReportData> {
+    this.validateDateRange(startDate, endDate);
+
+    // Calculate revenue based on resolved complaints (placeholder pricing)
+    const resolvedComplaints = await this.prisma.complaint.findMany({
+      where: {
+        status: ComplaintStatus.RESOLVED,
+        resolvedAt: {
+          gte: startDate,
+          lte: endDate,
+        },
+      },
+      include: {
+        tasks: {
+          include: {
+            technician: true,
+          },
+        },
+      },
+    });
+
+    // Simple revenue calculation - you can replace with your actual pricing logic
+    const revenueByCategory = this.calculateRevenueByCategory(resolvedComplaints);
+    const totalRevenue = revenueByCategory.reduce((sum, item) => sum + item.amount, 0);
+
+    // Expense calculation (placeholder - integrate with your actual expense tracking)
+    const expenses = await this.calculateExpenses(startDate, endDate);
+    const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
+
+    const netProfit = totalRevenue - totalExpenses;
+    const margin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
+
     return {
       period: { start: startDate, end: endDate },
       revenue: {
-        total: 0,
-        byService: [],
+        total: totalRevenue,
+        byService: revenueByCategory,
       },
       expenses: {
-        total: 0,
-        categories: [],
+        total: totalExpenses,
+        categories: expenses,
       },
       profitability: {
-        netProfit: 0,
-        margin: 0,
+        netProfit,
+        margin: Math.round(margin * 100) / 100,
       },
       generatedAt: new Date(),
     };
@@ -290,6 +307,15 @@ export class ReportsService {
 
   // Save report to database
   async saveReport(createReportDto: CreateReportDto, reportData: any) {
+    // Validate user exists and has permission to generate reports
+    const user = await this.prisma.user.findUnique({
+      where: { id: createReportDto.generatedBy },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
     return this.prisma.report.create({
       data: {
         title: createReportDto.title,
@@ -301,17 +327,28 @@ export class ReportsService {
     });
   }
 
-  // Get all saved reports
-  async getSavedReports(page: number = 1, limit: number = 10) {
+  // Get all saved reports with advanced filtering
+  async getSavedReports(page: number = 1, limit: number = 10, type?: ReportType, search?: string) {
     const skip = (page - 1) * limit;
+
+    const where: any = {};
+    if (type) where.type = type;
+    if (search) {
+      where.OR = [
+        { title: { contains: search, mode: 'insensitive' } },
+        { generatedByUser: { name: { contains: search, mode: 'insensitive' } } },
+      ];
+    }
 
     const [reports, total] = await Promise.all([
       this.prisma.report.findMany({
+        where,
         include: {
           generatedByUser: {
             select: {
               name: true,
               email: true,
+              role: true,
             },
           },
         },
@@ -319,7 +356,7 @@ export class ReportsService {
         skip,
         take: limit,
       }),
-      this.prisma.report.count(),
+      this.prisma.report.count({ where }),
     ]);
 
     return {
@@ -342,6 +379,7 @@ export class ReportsService {
           select: {
             name: true,
             email: true,
+            role: true,
           },
         },
       },
@@ -354,49 +392,265 @@ export class ReportsService {
     return report;
   }
 
-  // Delete report
-  async deleteReport(id: number) {
-    const report = await this.prisma.report.findUnique({
+  // Delete report with permission check
+  async deleteReport(id: number, userId: number) {
+    const report = await this.prisma.report.findUnique({ 
       where: { id },
+      include: {
+        generatedByUser: {
+          select: { id: true }
+        }
+      }
     });
 
     if (!report) {
       throw new NotFoundException('Report not found');
     }
 
-    return this.prisma.report.delete({
-      where: { id },
+    // Check if user is admin or report owner
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { role: true }
     });
+
+    if (user?.role !== Role.ADMIN && report.generatedBy !== userId) {
+      throw new BadRequestException('You can only delete your own reports');
+    }
+
+    return this.prisma.report.delete({ where: { id } });
   }
 
   // Private helper methods
-  private async getMonthlyTrends(startDate: Date, endDate: Date) {
-    const trends = await this.prisma.complaint.groupBy({
-      by: ['createdAt'],
+
+  private validateDateRange(startDate: Date, endDate: Date) {
+    if (startDate > endDate) {
+      throw new BadRequestException('Start date cannot be after end date');
+    }
+
+    const maxRange = 365 * 24 * 60 * 60 * 1000; // 1 year in milliseconds
+    if (endDate.getTime() - startDate.getTime() > maxRange) {
+      throw new BadRequestException('Date range cannot exceed 1 year');
+    }
+  }
+
+  private async calculateResolutionMetrics(startDate: Date, endDate: Date) {
+    const resolvedComplaints = await this.prisma.complaint.findMany({
+      where: {
+        status: ComplaintStatus.RESOLVED,
+        resolvedAt: {
+          gte: startDate,
+          lte: endDate,
+        },
+      },
+      select: {
+        createdAt: true,
+        resolvedAt: true,
+      },
+    });
+
+    const totalComplaints = await this.prisma.complaint.count({
       where: {
         createdAt: {
           gte: startDate,
           lte: endDate,
         },
       },
-      _count: {
-        id: true,
+    });
+
+    const totalResolutionTime = resolvedComplaints.reduce((total, complaint) => {
+      if (complaint.resolvedAt && complaint.createdAt) {
+        return total + (complaint.resolvedAt.getTime() - complaint.createdAt.getTime());
+      }
+      return total;
+    }, 0);
+
+    const averageResolutionTime = resolvedComplaints.length > 0
+      ? totalResolutionTime / resolvedComplaints.length / (1000 * 60 * 60 * 24) // days
+      : 0;
+
+    const resolutionRate = totalComplaints > 0
+      ? (resolvedComplaints.length / totalComplaints) * 100
+      : 0;
+
+    return {
+      averageResolutionTime: Math.round(averageResolutionTime * 100) / 100,
+      resolutionRate: Math.round(resolutionRate * 100) / 100,
+      totalResolved: resolvedComplaints.length,
+      totalComplaints,
+    };
+  }
+
+  private async getTechnicianPerformance(startDate: Date, endDate: Date): Promise<FormattedTechnicianData[]> {
+    // FIXED: Query through Technician model instead of User
+    const technicians = await this.prisma.technician.findMany({
+      where: {
+        tasks: {
+          some: {
+            assignedAt: {
+              gte: startDate,
+              lte: endDate,
+            },
+          },
+        },
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        tasks: {
+          where: {
+            assignedAt: {
+              gte: startDate,
+              lte: endDate,
+            },
+          },
+          include: {
+            complaint: true,
+          },
+        },
       },
     });
 
-    // Group by month and format
-    const monthlyData = trends.reduce((acc, item) => {
-      const month = item.createdAt.toISOString().substring(0, 7); // YYYY-MM
-      if (!acc[month]) {
-        acc[month] = 0;
+    return technicians.map(tech => {
+      const tasks = tech.tasks ?? [];
+      const completedTasks = tasks.filter(task =>
+        task.complaint?.status === ComplaintStatus.RESOLVED
+      );
+      const totalTasks = tasks.length;
+      const efficiency = totalTasks > 0 ? (completedTasks.length / totalTasks) * 100 : 0;
+
+      return {
+        id: tech.user.id,
+        name: tech.user.name,
+        email: tech.user.email,
+        speciality: tech.speciality,
+        status: tech.status,
+        totalTasks,
+        completedTasks: completedTasks.length,
+        efficiency: Math.round(efficiency * 100) / 100, // Keep decimals
+      };
+    });
+  }
+
+  private calculateTaskResolutionMetrics(completedTasks: any[]) {
+    const totalResolutionTime = completedTasks.reduce((total, task) => {
+      if (task.complaint?.resolvedAt && task.complaint?.createdAt) {
+        const resolutionTime = task.complaint.resolvedAt.getTime() - task.complaint.createdAt.getTime();
+        return total + resolutionTime;
       }
-      acc[month] += item._count.id;
+      return total;
+    }, 0);
+
+    const averageResolutionTime = completedTasks.length > 0
+      ? totalResolutionTime / completedTasks.length / (1000 * 60 * 60) // hours
+      : 0;
+
+    return {
+      averageResolutionTime: Math.round(averageResolutionTime * 100) / 100,
+      totalCompleted: completedTasks.length,
+    };
+  }
+
+  private async calculateResponseTimeMetrics(technicianId: number, startDate: Date, endDate: Date) {
+    const tasks = await this.prisma.task.findMany({
+      where: {
+        technicianId,
+        assignedAt: {
+          gte: startDate,
+          lte: endDate,
+        },
+      },
+      include: {
+        complaint: true,
+      },
+    });
+
+    const totalResponseTime = tasks.reduce((total, task) => {
+      if (task.assignedAt && task.complaint?.createdAt) {
+        const responseTime = task.assignedAt.getTime() - task.complaint.createdAt.getTime();
+        return total + responseTime;
+      }
+      return total;
+    }, 0);
+
+    const averageResponseTime = tasks.length > 0
+      ? totalResponseTime / tasks.length / (1000 * 60 * 60) // hours
+      : 0;
+
+    return {
+      averageResponseTime: Math.round(averageResponseTime * 100) / 100,
+      totalTasks: tasks.length,
+    };
+  }
+
+  private calculateRevenueByCategory(complaints: any[]) {
+    // Placeholder pricing - replace with your actual pricing logic
+    const pricing: Record<ComplaintCategory, number> = {
+        [ComplaintCategory.WATER_LEAK]: 120,
+        [ComplaintCategory.NO_WATER]: 150,
+        [ComplaintCategory.DIRTY_WATER]: 200,
+        [ComplaintCategory.SANITATION]: 100,
+        [ComplaintCategory.PIPE_BURST]: 300,
+        [ComplaintCategory.DRAINAGE]: 80
+    };
+
+    const revenueByCategory = new Map<ComplaintCategory, number>();
+
+    complaints.forEach(complaint => {
+      const amount = pricing[complaint.category] || 50;
+      const current = revenueByCategory.get(complaint.category) || 0;
+      revenueByCategory.set(complaint.category, current + amount);
+    });
+
+    return Array.from(revenueByCategory.entries()).map(([category, amount]) => ({
+      category,
+      amount,
+    }));
+  }
+
+  private async calculateExpenses(startDate: Date, endDate: Date) {
+    // Placeholder - integrate with your actual expense tracking system
+    // This could come from a separate Expenses model
+    return [
+      { name: 'Labor', amount: 5000 },
+      { name: 'Materials', amount: 2000 },
+      { name: 'Transportation', amount: 800 },
+      { name: 'Administrative', amount: 1200 },
+    ];
+  }
+
+  private async getMonthlyTrends(startDate: Date, endDate: Date) {
+    const trends = await this.prisma.complaint.findMany({
+      where: {
+        createdAt: {
+          gte: startDate,
+          lte: endDate,
+        },
+      },
+      select: {
+        createdAt: true,
+        id: true,
+        status: true,
+      },
+    });
+
+    const monthlyData = trends.reduce((acc: Record<string, { total: number; resolved: number }>, item) => {
+      const month = item.createdAt.toISOString().substring(0, 7);
+      if (!acc[month]) acc[month] = { total: 0, resolved: 0 };
+      acc[month].total++;
+      if (item.status === ComplaintStatus.RESOLVED) acc[month].resolved++;
       return acc;
     }, {});
 
-    return Object.entries(monthlyData).map(([month, count]) => ({
+    return Object.entries(monthlyData).map(([month, data]) => ({
       month,
-      complaints: count,
+      total: data.total,
+      resolved: data.resolved,
+      resolutionRate: data.total > 0 ? Math.round((data.resolved / data.total) * 100) : 0,
     }));
   }
 
@@ -414,33 +668,26 @@ export class ReportsService {
       },
     });
 
-    const monthlyData = tasks.reduce((acc, task) => {
+    const monthlyData = tasks.reduce((acc: Record<string, { assigned: number; completed: number }>, task) => {
       const month = task.assignedAt.toISOString().substring(0, 7);
-      if (!acc[month]) {
-        acc[month] = { assigned: 0, completed: 0 };
-      }
+      if (!acc[month]) acc[month] = { assigned: 0, completed: 0 };
       acc[month].assigned++;
-      if (task.complaint.status === 'RESOLVED') {
-        acc[month].completed++;
-      }
+      if (task.complaint?.status === ComplaintStatus.RESOLVED) acc[month].completed++;
       return acc;
     }, {});
 
-    return Object.entries(monthlyData).map(([month, data]: [string, any]) => ({
+    return Object.entries(monthlyData).map(([month, data]) => ({
       month,
       assigned: data.assigned,
       completed: data.completed,
-      completionRate: Math.round((data.completed / data.assigned) * 100),
+      completionRate: data.assigned > 0 ? Math.round((data.completed / data.assigned) * 100) : 0,
     }));
   }
 
   private formatGroupedData(data: any[], groupBy: string) {
-    return data.reduce((acc, item) => {
-      const key = item[groupBy];
-      if (!acc[key]) {
-        acc[key] = 0;
-      }
-      acc[key] += item._count.id;
+    return data.reduce((acc: Record<string, number>, item) => {
+      const key = (item as any)[groupBy] ?? 'Unknown';
+      acc[key] = (acc[key] || 0) + item._count.id;
       return acc;
     }, {});
   }
