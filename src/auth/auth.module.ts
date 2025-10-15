@@ -6,6 +6,9 @@ import { JwtModule, JwtService } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtStrategy } from './jwt.strategy';
 import { EmailService } from 'src/email/email.service';
+import { AdminApiKeyGuard } from './admin-api-key.guard';
+import { EitherAuthGuard } from './either-auth.guard';
+import { JwtAuthGuard } from './jwt-auth.guard';
 
 @Module({
   imports: [
@@ -20,12 +23,21 @@ import { EmailService } from 'src/email/email.service';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService,
+  providers: [
+    AuthService,
     PrismaService,
     JwtStrategy,
-    EmailService
+    EmailService,
+    AdminApiKeyGuard,
+    EitherAuthGuard,
+   JwtAuthGuard,
   ],
-  exports:[AuthService]
+  exports:[
+    AuthService,
+    JwtAuthGuard,
+    AdminApiKeyGuard,
+    EitherAuthGuard,
+  ],
   
 })
 export class AuthModule {}

@@ -352,17 +352,17 @@ export class AuthService {
       email: user.email, 
       role: user.role 
     };
+    const expiresIn = user.role === Role.ADMIN ? '30d': '7d'
     
     return {
       access_token: this.jwtService.sign(payload, {
-        expiresIn: '7d', // Token expiry 
+        expiresIn
       }),
       user: {
         id: user.id,
         email: user.email,
         role: user.role,
         name: user.name,
-        // Only include non-sensitive information
       },
     };
   }
