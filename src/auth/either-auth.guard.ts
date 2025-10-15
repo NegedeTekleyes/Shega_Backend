@@ -11,7 +11,7 @@ export class EitherAuthGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    // ✅ 1. Try admin API key guard first
+    // 1. Try admin API key guard first
     const adminResult = this.adminApiKeyGuard.canActivate(context);
     const adminOk = isObservable(adminResult)
       ? await firstValueFrom(adminResult)
@@ -19,7 +19,7 @@ export class EitherAuthGuard implements CanActivate {
 
     if (adminOk) return true;
 
-    // ✅ 2. Fall back to JWT guard
+    // 2. Fall back to JWT guard
     const jwtResult = this.jwtAuthGuard.canActivate(context);
     const jwtOk = isObservable(jwtResult)
       ? await firstValueFrom(jwtResult)
