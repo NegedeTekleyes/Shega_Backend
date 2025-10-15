@@ -4,9 +4,10 @@ import { Role } from '@prisma/client';
 import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { RolesGuard } from 'src/auth/roles.guard';
 import { Roles } from 'src/auth/roles.decorator';
+import { EitherAuthGuard } from 'src/auth/either-auth.guard';
 
 @Controller('analytics')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(EitherAuthGuard, RolesGuard)
 export class AnalyticsController {
   constructor(private readonly analyticsService: AnalyticsService) {}
 
