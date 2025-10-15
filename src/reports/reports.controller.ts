@@ -9,6 +9,8 @@ import {
   Body,
   UseGuards,
   Request,
+  ParseIntPipe,
+  BadRequestException,
 } from '@nestjs/common';
 import { ReportsService } from './reports.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -76,18 +78,30 @@ export class ReportsController {
     };
   }
 
-  @Get('analytics')
-  @Roles(Role.ADMIN)
-  async getAnalyticsReport(
-    @Query('startDate') startDate: string,
-    @Query('endDate') endDate: string,
-  ) {
-    return this.reportsService.generateAnalyticsReport(
-      new Date(startDate),
-      new Date(endDate),
-      1, // System user
-    );
+ @Get('analytics')
+@Roles(Role.ADMIN)
+async getAnalyticsReport(
+  @Query('startDate') startDate: string,
+  @Query('endDate') endDate: string,
+  @Request() req,
+): Promise<any> { // Change return type to 'any' to avoid the type naming issue
+  if (!startDate || !endDate) {
+    throw new BadRequestException('startDate and endDate are required');
   }
+
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+    throw new BadRequestException('Invalid date format');
+  }
+
+  return this.reportsService.generateAnalyticsReport(
+    start,
+    end,
+    req.user.id,
+  );
+}
 
   @Get('technician/:id')
   @Roles(Role.ADMIN)
@@ -123,8 +137,11 @@ export class ReportsController {
   }
 
   @Delete(':id')
-  @Roles(Role.ADMIN)
-  async deleteReport(@Param('id') id: string) {
-    return this.reportsService.deleteReport(parseInt(id));
+  @Roles(Role.ADMIN, Role.TECHNICIAN)
+  async deleteReport(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req,
+) {
+    return this.reportsService.deleteReport(id, req.user.id);
   }
 }
