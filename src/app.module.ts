@@ -1,11 +1,14 @@
 import { Module } from '@nestjs/common';
 import { PrismaModule } from './prisma/prisma.module';
-import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from './auth/auth.module';
-import { ComplaintsModule } from './compliants/complaints.module';
-import {CompliantsService} from 'src/compliants/compliants.service'
-import {CompliantsController}  from 'src/compliants/compliants.controller'
+import { ComplaintsModule } from './complaints/complaints.module';
+import { ComplaintsService } from './complaints/complaints.service';
+import { ComplaintsController } from './complaints/complaints.controller';
+import { UsersModule } from './users/users.module';
+import { ReportsModule } from './reports/reports.module';
+import { AnalyticsModule } from './analytics/analytics.module';
+import { TechniciansModule } from './technician/technicians.module';
 @Module({
 
   imports: [
@@ -15,13 +18,17 @@ import {CompliantsController}  from 'src/compliants/compliants.controller'
     PrismaModule,
     AuthModule,
     ComplaintsModule,
+    UsersModule,
+    ReportsModule,
+    AnalyticsModule,
+    TechniciansModule,
   ],
   providers: [
     // provide: APP_GUARD,
     // useClass: JwtAuthGuard,
-  CompliantsService
+  ComplaintsService
 ],
-  controllers: [CompliantsController]
+  controllers: [ComplaintsController]
   
   
 })
