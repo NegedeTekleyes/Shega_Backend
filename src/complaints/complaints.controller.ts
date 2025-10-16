@@ -13,34 +13,27 @@ import {
   BadRequestException,
   ForbiddenException,
   DefaultValuePipe,
+  Patch,
 } from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { RolesGuard } from '../auth/roles.guard';
-import { Roles } from '../auth/roles.decorator';
+// import { Roles } from '../auth/roles.decorator';
 import { Role, ComplaintStatus } from '@prisma/client';
 import { CreateComplaintDto } from './dto/create-complaint.dto';
 import { ComplaintsService } from './complaints.service';
+import { AdminApiKeyGuard } from 'src/auth/admin-api-key.guard';
 
 @Controller('complaints')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(AdminApiKeyGuard)
 export class ComplaintsController {
   constructor(private readonly complaintsService: ComplaintsService) {}
 
-  // ==========================================================================
-  // SPECIFIC ROUTES (must come BEFORE parameterized routes)
-  // ==========================================================================
-
-  // --------------------------------------------------------------------------
-  // ADMIN ENDPOINTS
-  // --------------------------------------------------------------------------
-
   @Get()
-  @Roles(Role.ADMIN)
+  // @Roles(Role.ADMIN)
   async getAllComplaints(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('status') status?: ComplaintStatus,
-  ) {
+    @Query('urgency') urgency?: string,
+    @Query('category') category?: string,  ) {
     const pageNum = page ? parseInt(page, 10) : 1;
     const limitNum = limit ? parseInt(limit, 10) : 10;
 
@@ -51,11 +44,17 @@ export class ComplaintsController {
       throw new BadRequestException('Limit must be between 1 and 100');
     }
 
-    return this.complaintsService.getAllComplaints(pageNum, limitNum, status);
+    return this.complaintsService.getAllComplaints(
+      pageNum, 
+      limitNum, 
+      status,
+      urgency,
+       category,
+);
   }
 
   @Get('stats')
-  @Roles(Role.ADMIN)
+  // @Roles(Role.ADMIN)
   async getComplaintStats() {
     return this.complaintsService.getComplaintStats();
   }
@@ -65,13 +64,13 @@ export class ComplaintsController {
   // --------------------------------------------------------------------------
 
   @Post()
-  @Roles(Role.RESIDENT, Role.ADMIN)
+  // @Roles(Role.RESIDENT, Role.ADMIN)
   async createComplaint(@Body() dto: CreateComplaintDto, @Request() req) {
     return this.complaintsService.create(req.user.id, dto);
   }
 
   @Get('my-complaints') // <-- MOVED BEFORE :id route
-  @Roles(Role.RESIDENT, Role.ADMIN, Role.TECHNICIAN)
+  // @Roles(Role.RESIDENT, Role.ADMIN, Role.TECHNICIAN)
   async getUserComplaints(
     @Request() req,
     @Query('page') page: string | number = 1,
@@ -105,7 +104,7 @@ export class ComplaintsController {
   // --------------------------------------------------------------------------
 
   @Get('technician/assigned')
-  @Roles(Role.TECHNICIAN)
+  // @Roles(Role.TECHNICIAN)
   async getAssignedComplaints(
     @Request() req,
     @Query('page') page?: string,
@@ -153,7 +152,7 @@ export class ComplaintsController {
   }
 
   @Put(':id/status')
-  @Roles(Role.ADMIN, Role.TECHNICIAN)
+  // @Roles(Role.ADMIN, Role.TECHNICIAN)
   async updateComplaintStatus(
     @Param('id') id: string,
     @Body() body: { status: ComplaintStatus; adminNotes?: string },
@@ -173,8 +172,8 @@ export class ComplaintsController {
     );
   }
 
-  @Put(':id/assign')
-  @Roles(Role.ADMIN)
+  @Patch(':id/assign')
+  // @Roles(Role.ADMIN)
   async assignTechnician(
     @Param('id') id: string,
     @Body() body: { technicianId: number },
@@ -194,7 +193,7 @@ export class ComplaintsController {
   }
 
   @Delete(':id')
-  @Roles(Role.ADMIN)
+  // @Roles(Role.ADMIN)
   async deleteComplaint(@Param('id') id: string) {
     const complaintId = parseInt(id, 10);
     if (isNaN(complaintId)) {
