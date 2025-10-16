@@ -1,31 +1,46 @@
-import { CanActivate, ExecutionContext, Injectable } from "@nestjs/common";
+import { CanActivate, ExecutionContext, Injectable, UnauthorizedException, ForbiddenException } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { Role } from "@prisma/client";
-import { Observable } from "rxjs";
-
 
 @Injectable()
-export class AdminApiKeyGuard implements CanActivate{
-    canActivate(context: ExecutionContext): boolean  {
-        const req = context.switchToHttp().getRequest()
-        const apiKeyHeader = req.headers['x-admin-api-key'] || req.headers['X-Admin-Api-Key']
+export class AdminApiKeyGuard implements CanActivate {
+    constructor(private configService: ConfigService) {}
 
-        const expected = process.env.ADMIN_API_KEY;
-        if(!expected) {
-            return false
-        }
-        if(!apiKeyHeader) {
-            return false
-        }
-       if(apiKeyHeader !== expected){
-        return false
-       }
-       req.user = {
-        id: 0,
-        email:'admin-api-key@local',
-        role: Role.ADMIN,
+    canActivate(context: ExecutionContext): boolean {
+        const req = context.switchToHttp().getRequest();
+        
+        // Case-insensitive header check
+        const apiKeyHeader = req.headers['x-admin-api-key'] || 
+                            req.headers['X-Admin-Api-Key'] ||
+                            req.headers['x-admin-key'] ||
+                            req.headers['X-Admin-Key'];
 
-       }
-
-       return true
+        const expectedApiKey = this.configService.get<string>('ADMIN_API_KEY');
+        
+        // Check if API key is configured
+        if (!expectedApiKey) {
+            console.error('ADMIN_API_KEY is not configured in environment variables');
+            throw new ForbiddenException('Admin API configuration error');
         }
+
+        // Check if API key is provided
+        if (!apiKeyHeader) {
+            throw new UnauthorizedException('Missing admin API key');
+        }
+
+        // Validate API key
+        if (apiKeyHeader !== expectedApiKey) {
+            throw new UnauthorizedException('Invalid admin API key');
+        }
+
+        // Set admin user in request
+        req.user = {
+            id: 0, // or generate a unique admin ID
+            email: 'admin@system.com',
+            role: Role.ADMIN,
+            isAdmin: true, // additional flag for easy checking
+        };
+
+        return true;
     }
+}
