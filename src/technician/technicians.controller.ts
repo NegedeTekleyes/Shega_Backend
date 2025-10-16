@@ -12,8 +12,6 @@ import {
   UsePipes,
   ValidationPipe 
 } from '@nestjs/common';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { Role } from '@prisma/client';
 import { CreateTechnicianDto } from './dto/create-technician.dto';
