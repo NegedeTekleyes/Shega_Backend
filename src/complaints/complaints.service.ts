@@ -160,9 +160,18 @@ export class ComplaintsService {
   }
 
   // READ - All complaints with pagination (Admin only)
-  async getAllComplaints(page = 1, limit = 10, status?: ComplaintStatus) {
+  async getAllComplaints(
+        page = 1, 
+        limit = 10,
+        status?: ComplaintStatus,
+        urgency?: string,
+        category?: string, 
+      ) {
     const skip = (page - 1) * limit;
-    const where = status ? { status } : {};
+    const where: any = {};
+    if(status) where.status = status
+    if(urgency) where.urgency = urgency
+    if(category) where.category = category
 
     const [complaints, total] = await Promise.all([
       this.prisma.complaint.findMany({
