@@ -10,7 +10,9 @@ import {
   Body, 
   UseGuards,
   UsePipes,
-  ValidationPipe 
+  ValidationPipe, 
+  Req,
+  Patch
 } from '@nestjs/common';
 import { Roles } from '../auth/roles.decorator';
 import { Role } from '@prisma/client';
@@ -18,14 +20,17 @@ import { CreateTechnicianDto } from './dto/create-technician.dto';
 import { UpdateTechnicianDto } from './dto/update-technician.dto';
 import { TechniciansService } from './technicians.service';
 import { AdminApiKeyGuard } from 'src/auth/admin-api-key.guard';
+import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
+import { RolesGuard } from 'src/auth/roles.guard';
 
 @Controller('technicians')
-@UseGuards(AdminApiKeyGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }))
 export class TechniciansController {
   constructor(private readonly techniciansService: TechniciansService) {}
 
   @Get()
+  @UseGuards(AdminApiKeyGuard)
   @Roles(Role.ADMIN)
   async getAllTechnicians(
     @Query('page') page: string = '1',
@@ -85,4 +90,25 @@ async resetTechnicianPassword(
 ) {
   return this.techniciansService.resetTechnicianPassword(parseInt(id), body.password);
 }
+
+// @Get('assigned')
+// @Roles(Role.TECHNICIAN)
+// async getMyTasks(@Req() req) {
+//   const technicianId = req.user.id;
+//   return this.techniciansService.getTasksByTechnician(technicianId);
+// }
+
+@Patch('task/:id/status')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(Role.TECHNICIAN)
+async updateTaskStatus(
+  @Param('id') id: string,
+  @Body() body: { status: string; hoursWorked?: number; workDate?: string; note?: string },
+  @Req() req,
+) {
+  const technicianId = req.user.id;
+  return this.techniciansService.updateTaskStatus(+id, technicianId, body);
+}
+
+
 }
