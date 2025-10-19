@@ -349,4 +349,30 @@ export class TechniciansService  {
 
     return { message: 'Password reset successfully' };
   }
+
+  async getTasksByTechnician(technicianId: number) {
+  return this.prisma.task.findMany({
+    where: { technicianId },
+    include: {
+      complaint: {
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          status: true,
+        },
+      },
+    },
+    orderBy: { assignedAt: 'desc' },
+  });
+}
+
+async updateTaskStatus(id: number, technicianId: number, body: any) {
+  const { resolutionNotes, resolutionPhotoUrl, updatedAt } = body;
+  return this.prisma.task.update({
+    where: { id, technicianId },
+    data: { resolutionNotes, resolutionPhotoUrl, updatedAt },
+  });
+}
+
 }
