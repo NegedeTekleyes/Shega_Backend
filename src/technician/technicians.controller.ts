@@ -24,13 +24,12 @@ import { JwtAuthGuard } from 'src/auth/jwt-auth.guard';
 import { RolesGuard } from 'src/auth/roles.guard';
 
 @Controller('technicians')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(AdminApiKeyGuard)
 @UsePipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }))
 export class TechniciansController {
   constructor(private readonly techniciansService: TechniciansService) {}
 
   @Get()
-  @UseGuards(AdminApiKeyGuard)
   @Roles(Role.ADMIN)
   async getAllTechnicians(
     @Query('page') page: string = '1',
@@ -91,12 +90,7 @@ async resetTechnicianPassword(
   return this.techniciansService.resetTechnicianPassword(parseInt(id), body.password);
 }
 
-// @Get('assigned')
-// @Roles(Role.TECHNICIAN)
-// async getMyTasks(@Req() req) {
-//   const technicianId = req.user.id;
-//   return this.techniciansService.getTasksByTechnician(technicianId);
-// }
+
 
 @Patch('task/:id/status')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -109,6 +103,4 @@ async updateTaskStatus(
   const technicianId = req.user.id;
   return this.techniciansService.updateTaskStatus(+id, technicianId, body);
 }
-
-
 }
