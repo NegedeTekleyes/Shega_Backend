@@ -1,4 +1,3 @@
-// src/reports/reports.controller.ts
 import {
   Controller,
   Get,
@@ -13,7 +12,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { ReportsService } from './reports.service';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { AdminApiKeyGuard } from '../auth/admin-api-key.guard'; // Import AdminApiKeyGuard
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { Role } from '@prisma/client';
@@ -25,7 +24,7 @@ class GenerateReportDto {
 }
 
 @Controller('reports')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(AdminApiKeyGuard, RolesGuard) // Replace JwtAuthGuard with AdminApiKeyGuard
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
 
@@ -36,13 +35,14 @@ export class ReportsController {
     const { startDate, endDate, technicianId } = filters;
 
     let reportData;
+    const userId = req.user?.id || 1; // Fallback to system user ID (e.g., 1) if no JWT
 
     switch (type) {
       case 'ANALYTICS':
         reportData = await this.reportsService.generateAnalyticsReport(
           new Date(startDate),
           new Date(endDate),
-          req.user.id,
+          userId,
         );
         break;
       case 'TECHNICIAN':
@@ -50,26 +50,25 @@ export class ReportsController {
           technicianId,
           new Date(startDate),
           new Date(endDate),
-          req.user.id,
+          userId,
         );
         break;
       case 'FINANCIAL':
         reportData = await this.reportsService.generateFinancialReport(
           new Date(startDate),
           new Date(endDate),
-          req.user.id,
+          userId,
         );
         break;
       default:
         throw new Error('Invalid report type');
     }
 
-    // Save the report
     const savedReport = await this.reportsService.saveReport({
       title,
       type: type as any,
       filters,
-      generatedBy: req.user.id,
+      generatedBy: userId,
     }, reportData);
 
     return {
@@ -78,30 +77,27 @@ export class ReportsController {
     };
   }
 
- @Get('analytics')
-@Roles(Role.ADMIN)
-async getAnalyticsReport(
-  @Query('startDate') startDate: string,
-  @Query('endDate') endDate: string,
-  @Request() req,
-): Promise<any> { // Change return type to 'any' to avoid the type naming issue
-  if (!startDate || !endDate) {
-    throw new BadRequestException('startDate and endDate are required');
+  @Get('analytics')
+  @Roles(Role.ADMIN)
+  async getAnalyticsReport(
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
+    @Request() req,
+  ): Promise<any> {
+    if (!startDate || !endDate) {
+      throw new BadRequestException('startDate and endDate are required');
+    }
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      throw new BadRequestException('Invalid date format');
+    }
+
+    const userId = req.user?.id || 1; // Fallback to system user ID
+    return this.reportsService.generateAnalyticsReport(start, end, userId);
   }
-
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-
-  if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-    throw new BadRequestException('Invalid date format');
-  }
-
-  return this.reportsService.generateAnalyticsReport(
-    start,
-    end,
-    req.user.id,
-  );
-}
 
   @Get('technician/:id')
   @Roles(Role.ADMIN)
@@ -117,8 +113,32 @@ async getAnalyticsReport(
       1, // System user
     );
   }
+@Get('technicians/:id/performance')
+  @Roles(Role.ADMIN)
+  async getTechnicianPerformance(
+    @Param('id') id: string,
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
+  ) {
+    return this.reportsService.generateTechnicianReport(
+      parseInt(id),
+      new Date(startDate),
+      new Date(endDate),
+      1, // System user
+    );
+  }
 
-  @Get()
+  // @Get('export/:id')
+  // @Roles(Role.ADMIN)
+  // async exportReport(
+  //   @Param('id',ParseIntPipe) id: number,
+  //   @Query('format') format: string,
+  // ) {
+  //   return this.reportsService.exportReport(id, format)
+  // }
+  
+
+  @Get('saved')
   @Roles(Role.ADMIN)
   async getSavedReports(
     @Query('page') page: string = '1',
@@ -141,7 +161,8 @@ async getAnalyticsReport(
   async deleteReport(
     @Param('id', ParseIntPipe) id: number,
     @Request() req,
-) {
-    return this.reportsService.deleteReport(id, req.user.id);
+  ) {
+    const userId = req.user?.id || 1; // Fallback to system user
+    return this.reportsService.deleteReport(id, userId);
   }
 }
