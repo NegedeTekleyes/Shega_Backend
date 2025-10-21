@@ -124,7 +124,7 @@ export class ReportsController {
       parseInt(id),
       new Date(startDate),
       new Date(endDate),
-      1, // System user
+      1, 
     );
   }
 
