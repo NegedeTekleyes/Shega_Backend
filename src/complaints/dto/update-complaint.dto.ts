@@ -18,7 +18,7 @@ export class LocationDataDto {
   accuracy?: number;
 }
 
-export class CreateComplaintDto {
+export class UpdateComplaintDto {
   @IsString()
   @IsNotEmpty()
   title: string;
@@ -27,11 +27,13 @@ export class CreateComplaintDto {
   @IsNotEmpty()
   description: string;
 
+   @IsOptional()
   @IsEnum(ComplaintCategory)
-  category: ComplaintCategory
+  category?: ComplaintCategory;
 
- @IsEnum(Priority)
- urgency: Priority
+  @IsOptional()
+  @IsEnum(Priority)
+  urgency?: Priority;
 
   @IsOptional()
   locationData?: LocationDataDto;
