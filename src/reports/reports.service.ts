@@ -372,6 +372,9 @@ export class ReportsService {
 
   // Get report by ID
   async getReportById(id: number) {
+    if(!id || isNaN(id) || id <= 0) {
+      throw new BadRequestException('Invalid report ID')
+    }
     const report = await this.prisma.report.findUnique({
       where: { id },
       include: {
@@ -392,6 +395,33 @@ export class ReportsService {
     return report;
   }
 
+//   async exportReport(id: number, format: 'csv' | 'pdf' | 'excel'): Promise<{ buffer: Buffer; filename: string; contentType: string }> {
+//   if (!id || isNaN(id) || id <= 0) {
+//     throw new BadRequestException('Invalid report ID');
+//   }
+
+//   if (!['csv', 'pdf', 'excel'].includes(format)) {
+//     throw new BadRequestException('Invalid export format. Use csv, pdf, or excel.');
+//   }
+
+//   const report = await this.getReportById(id);
+//   const filename = `${report.title.replace(/\s+/g, '_').toLowerCase()}_${new Date().toISOString().split('T')[0]}.${format}`;
+
+//   switch (format) {
+//     case 'csv':
+//       return this.generateCsvReport(report, filename);
+//     case 'pdf':
+//       return this.generatePdfReport(report, filename);
+//     case 'excel':
+//       return this.generateExcelReport(report, filename);
+//     default:
+//       throw new BadRequestException('Invalid export format');
+//   }
+// }
+
+// private async generateCsvReport(report: any, filename: string): Promise<{buffer: Buffer; filename: string; contentType: string}>{
+  
+// }
   // Delete report with permission check
   async deleteReport(id: number, userId: number) {
     const report = await this.prisma.report.findUnique({ 
