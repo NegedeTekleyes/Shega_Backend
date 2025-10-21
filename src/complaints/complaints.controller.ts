@@ -12,28 +12,35 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
-  DefaultValuePipe,
   Patch,
+  Req,
 } from '@nestjs/common';
-// import { Roles } from '../auth/roles.decorator';
+import { Roles } from '../auth/roles.decorator'; // Uncomment this
 import { Role, ComplaintStatus } from '@prisma/client';
 import { CreateComplaintDto } from './dto/create-complaint.dto';
 import { ComplaintsService } from './complaints.service';
 import { AdminApiKeyGuard } from 'src/auth/admin-api-key.guard';
+import { JwtAuthGuard } from 'src/auth/jwt-auth.guard'; // Add this import
+import { RolesGuard } from 'src/auth/roles.guard'; // Add this import
 
 @Controller('complaints')
-@UseGuards(AdminApiKeyGuard)
 export class ComplaintsController {
   constructor(private readonly complaintsService: ComplaintsService) {}
 
+  // ==========================================================================
+  // ADMIN ONLY ENDPOINTS
+  // ==========================================================================
+
   @Get()
-  // @Roles(Role.ADMIN)
+  @UseGuards(AdminApiKeyGuard) // Add proper guards
+  @Roles(Role.ADMIN) // Uncomment and use
   async getAllComplaints(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('status') status?: ComplaintStatus,
     @Query('urgency') urgency?: string,
-    @Query('category') category?: string,  ) {
+    @Query('category') category?: string,
+  ) {
     const pageNum = page ? parseInt(page, 10) : 1;
     const limitNum = limit ? parseInt(limit, 10) : 10;
 
@@ -45,32 +52,69 @@ export class ComplaintsController {
     }
 
     return this.complaintsService.getAllComplaints(
-      pageNum, 
-      limitNum, 
+      pageNum,
+      limitNum,
       status,
       urgency,
-       category,
-);
+      category,
+    );
   }
 
   @Get('stats')
-  // @Roles(Role.ADMIN)
+  @UseGuards( AdminApiKeyGuard)
+  @Roles(Role.ADMIN)
   async getComplaintStats() {
     return this.complaintsService.getComplaintStats();
   }
 
-  // --------------------------------------------------------------------------
+  @Delete(':id')
+  @UseGuards( AdminApiKeyGuard)
+  @Roles(Role.ADMIN)
+  async deleteComplaint(@Param('id') id: string) {
+    const complaintId = parseInt(id, 10);
+    if (isNaN(complaintId)) {
+      throw new BadRequestException('Invalid complaint ID');
+    }
+
+    await this.complaintsService.deleteComplaint(complaintId);
+    return { message: 'Complaint deleted successfully' };
+  }
+
+  @Patch(':id/assign')
+  @UseGuards( AdminApiKeyGuard)
+  @Roles(Role.ADMIN)
+  async assignTechnician(
+    @Param('id') id: string,
+    @Body() body: { technicianId: number },
+  ) {
+    const complaintId = parseInt(id, 10);
+    if (isNaN(complaintId)) {
+      throw new BadRequestException('Invalid complaint ID');
+    }
+    if (!body.technicianId) {
+      throw new BadRequestException('Technician ID is required');
+    }
+
+    return this.complaintsService.assignTechnician(
+      complaintId,
+      body.technicianId,
+    );
+  }
+
+  // ==========================================================================
   // RESIDENT ENDPOINTS
-  // --------------------------------------------------------------------------
+  // ==========================================================================
 
   @Post()
-  // @Roles(Role.RESIDENT, Role.ADMIN)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.RESIDENT)
   async createComplaint(@Body() dto: CreateComplaintDto, @Request() req) {
     return this.complaintsService.create(req.user.id, dto);
   }
 
-  @Get('my-complaints') // <-- MOVED BEFORE :id route
-  // @Roles(Role.RESIDENT, Role.ADMIN, Role.TECHNICIAN)
+  @Get('my-complaints')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.RESIDENT)
   async getUserComplaints(
     @Request() req,
     @Query('page') page: string | number = 1,
@@ -99,12 +143,13 @@ export class ComplaintsController {
     );
   }
 
-  // --------------------------------------------------------------------------
+  // ==========================================================================
   // TECHNICIAN ENDPOINTS
-  // --------------------------------------------------------------------------
+  // ==========================================================================
 
-  @Get('technician/assigned')
-  // @Roles(Role.TECHNICIAN)
+  @Get('assigned')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.TECHNICIAN)
   async getAssignedComplaints(
     @Request() req,
     @Query('page') page?: string,
@@ -128,10 +173,12 @@ export class ComplaintsController {
   }
 
   // ==========================================================================
-  // PARAMETERIZED ROUTES (must come AFTER specific routes)
+  // SHARED ENDPOINTS (Multiple roles)
   // ==========================================================================
 
-  @Get(':id') // <-- MOVED TO BOTTOM
+  @Get(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.RESIDENT, Role.TECHNICIAN)
   async getComplaintById(@Param('id') id: string, @Request() req) {
     const complaintId = parseInt(id, 10);
     if (isNaN(complaintId)) {
@@ -152,7 +199,8 @@ export class ComplaintsController {
   }
 
   @Put(':id/status')
-  // @Roles(Role.ADMIN, Role.TECHNICIAN)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.TECHNICIAN)
   async updateComplaintStatus(
     @Param('id') id: string,
     @Body() body: { status: ComplaintStatus; adminNotes?: string },
@@ -170,37 +218,5 @@ export class ComplaintsController {
       body.status,
       body.adminNotes,
     );
-  }
-
-  @Patch(':id/assign')
-  // @Roles(Role.ADMIN)
-  async assignTechnician(
-    @Param('id') id: string,
-    @Body() body: { technicianId: number },
-  ) {
-    const complaintId = parseInt(id, 10);
-    if (isNaN(complaintId)) {
-      throw new BadRequestException('Invalid complaint ID');
-    }
-    if (!body.technicianId) {
-      throw new BadRequestException('Technician ID is required');
-    }
-
-    return this.complaintsService.assignTechnician(
-      complaintId,
-      body.technicianId,
-    );
-  }
-
-  @Delete(':id')
-  // @Roles(Role.ADMIN)
-  async deleteComplaint(@Param('id') id: string) {
-    const complaintId = parseInt(id, 10);
-    if (isNaN(complaintId)) {
-      throw new BadRequestException('Invalid complaint ID');
-    }
-
-    await this.complaintsService.deleteComplaint(complaintId);
-    return { message: 'Complaint deleted successfully' };
   }
 }
