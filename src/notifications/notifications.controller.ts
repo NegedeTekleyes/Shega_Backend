@@ -1,3 +1,4 @@
+// notifications.controller.ts
 import {
   Controller,
   Get,
@@ -26,30 +27,73 @@ export class NotificationsController {
   ) {}
 
   /** ========================
-   * Admin: Create Notification
+   * ADMIN: Get All Notifications (with pagination)
+   * ======================== */
+  @Get()
+  async getAllNotifications(
+    @Query('page') page: number = 1,
+    @Query('limit') limit: number = 50,
+    @Request() req,
+  ) {
+    const apiKey = req.headers['x-admin-api-key'];
+    if (!apiKey || apiKey !== process.env.ADMIN_API_KEY) {
+      throw new UnauthorizedException('Invalid API key');
+    }
+
+    return this.notificationsService.getAllNotifications(
+      Number(page), 
+      Number(limit)
+    );
+  }
+
+  /** ========================
+   * ADMIN: Get Users List
+   * ======================== */
+  @Get('users')
+  async getUsers(@Request() req) {
+    const apiKey = req.headers['x-admin-api-key'];
+    if (!apiKey || apiKey !== process.env.ADMIN_API_KEY) {
+      throw new UnauthorizedException('Invalid API key');
+    }
+
+    return this.notificationsService.getUsers();
+  }
+
+  /** ========================
+   * ADMIN: Create Notification
    * ======================== */
   @Post()
   async create(
     @Body() createDto: CreateNotificationDto,
     @Request() req,
   ) {
-    // Admin API key from headers
-    const apiKey = req.headers['x-api-key'];
+    const apiKey = req.headers['x-admin-api-key'];
     if (!apiKey || apiKey !== process.env.ADMIN_API_KEY) {
       throw new UnauthorizedException('Invalid API key');
     }
 
-    // Admin ID can be hardcoded or fetched from DB
-    const adminId = 1; // or fetch admin user via API key
+    const adminId = 2; // or fetch admin user via API key
     return this.notificationsService.create(createDto, adminId);
   }
 
   /** ========================
-   * User: Fetch My Notifications
+   * ADMIN: Get Stats
+   * ======================== */
+  @Get('stats')
+  async getStats(@Request() req) {
+    const apiKey = req.headers['x-admin-api-key'];
+    if (!apiKey || apiKey !== process.env.ADMIN_API_KEY) {
+      throw new UnauthorizedException('Invalid API key');
+    }
+
+    return this.notificationsService.getStats();
+  }
+
+  /** ========================
+   * USER: Fetch My Notifications
    * ======================== */
   @Get('my-notifications')
   async getMyNotifications(@Request() req) {
-    // For simplicity, user ID is passed as query param or in headers
     const userId = Number(req.query.userId || req.headers['x-user-id']);
     if (!userId) throw new UnauthorizedException('User ID required');
 
@@ -57,7 +101,7 @@ export class NotificationsController {
   }
 
   /** ========================
-   * User: Mark Notification As Read
+   * USER: Mark Notification As Read
    * ======================== */
   @Patch('mark-read/:notificationId')
   async markAsRead(
@@ -71,7 +115,7 @@ export class NotificationsController {
   }
 
   /** ========================
-   * Admin: Update Notification
+   * ADMIN: Update Notification
    * ======================== */
   @Patch(':notificationId')
   async update(
@@ -79,24 +123,11 @@ export class NotificationsController {
     @Body() updateDto: UpdateNotificationDto,
     @Request() req,
   ) {
-    const apiKey = req.headers['x-api-key'];
+    const apiKey = req.headers['x-admin-api-key'];
     if (!apiKey || apiKey !== process.env.ADMIN_API_KEY) {
       throw new UnauthorizedException('Invalid API key');
     }
 
     return this.notificationsService.update(Number(notificationId), updateDto);
-  }
-
-  /** ========================
-   * Admin: Get Stats
-   * ======================== */
-  @Get('stats')
-  async getStats(@Request() req) {
-    const apiKey = req.headers['x-api-key'];
-    if (!apiKey || apiKey !== process.env.ADMIN_API_KEY) {
-      throw new UnauthorizedException('Invalid API key');
-    }
-
-    return this.notificationsService.getStats();
   }
 }
