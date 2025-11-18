@@ -1,88 +1,340 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+// notifications.service.ts
+import { Injectable, Inject, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { NotificationsGateway } from './notifications.gateway';
 import { CreateNotificationDto } from './dto/create-notification.dto';
 import { UpdateNotificationDto } from './dto/update-notification.dto';
+import { NotificationsGateway } from './notifications.gateway';
+import { Audience, NotificationType, ReceiptStatus, Role } from '@prisma/client';
 
 @Injectable()
 export class NotificationsService {
   constructor(
     private readonly prisma: PrismaService,
+    @Inject(forwardRef(() => NotificationsGateway))
     private readonly notificationsGateway: NotificationsGateway,
   ) {}
 
-  /** Create a notification for target users */
+  /** ========================
+   * Get All Notifications (Admin)
+   * ======================== */
+  async getAllNotifications(page: number = 1, limit: number = 50) {
+    const skip = (page - 1) * limit;
+    
+    const [notifications, total] = await Promise.all([
+      this.prisma.notification.findMany({
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          createdBy: { 
+            select: { 
+              id: true, 
+              name: true, 
+              email: true 
+            } 
+          },
+          receipts: {
+            include: { 
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  role: true
+                }
+              } 
+            }
+          }
+        }
+      }),
+      this.prisma.notification.count()
+    ]);
+
+    // Format for frontend
+    const formattedNotifications = notifications.map(notif => ({
+      id: notif.id.toString(),
+      title: notif.title,
+      message: notif.message,
+      type: notif.type,
+      status: 'Sent', // Default status for admin view
+      date: notif.createdAt.toISOString().slice(0, 10),
+      targetUserType: notif.audience,
+      specificUsers: notif.receipts.map(r => r.userId.toString()),
+      createdAt: notif.createdAt
+    }));
+
+    return {
+      notifications: formattedNotifications,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit)
+      }
+    };
+  }
+
+  /** ========================
+   * Get Users List
+   * ======================== */
+  async getUsers() {
+    const users = await this.prisma.user.findMany({
+      where: {
+        role: {
+          in: [Role.RESIDENT, Role.TECHNICIAN]
+        }
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        createdAt: true
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    // Format for frontend - convert role to type
+    return users.map(user => ({
+      id: user.id.toString(),
+      name: user.name,
+      email: user.email,
+      type: user.role.toLowerCase() as 'resident' | 'technician'
+    }));
+  }
+
+  /** ========================
+   * Create Notification
+   * ======================== */
   async create(createDto: CreateNotificationDto, adminId: number) {
-    // 1️⃣ Save notification in DB with receipts
-    const targetUserIds = createDto.targetUserIds || [];
+    const { title, message, type, targetUserType, specificUsers = [] } = createDto;
+
+    // Determine which users should receive this notification
+    let recipientUserIds: number[] = [];
+
+    if (targetUserType === Audience.SPECIFIC) {
+      // Use specific user IDs provided
+      recipientUserIds = specificUsers.map(id => parseInt(id));
+    } else if (targetUserType === Audience.RESIDENT) {
+      // Get all residents
+      const residents = await this.prisma.user.findMany({
+        where: { role: Role.RESIDENT },
+        select: { id: true }
+      });
+      recipientUserIds = residents.map(user => user.id);
+    } else if (targetUserType === Audience.TECHNICIAN) {
+      // Get all technicians
+      const technicians = await this.prisma.user.findMany({
+        where: { role: Role.TECHNICIAN },
+        select: { id: true }
+      });
+      recipientUserIds = technicians.map(user => user.id);
+    } else {
+      // 'ALL' - get all users (excluding other admins)
+      const allUsers = await this.prisma.user.findMany({
+        where: {
+          role: {
+            in: [Role.RESIDENT, Role.TECHNICIAN]
+          }
+        },
+        select: { id: true }
+      });
+      recipientUserIds = allUsers.map(user => user.id);
+    }
+
+    // Create notification in database
     const notification = await this.prisma.notification.create({
       data: {
-        title: createDto.title,
-        message: createDto.message,
-        audience: createDto.audience,
+        title,
+        message,
+        type: type || NotificationType.GENERAL,
+        audience: targetUserType,
         createdById: adminId,
         receipts: {
-          create: targetUserIds.map((id) => ({ userId: id })),
-        },
+          create: recipientUserIds.map(userId => ({
+            userId,
+            status: ReceiptStatus.UNREAD
+          }))
+        }
       },
-      include: { receipts: true },
+      include: {
+        receipts: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                role: true
+              }
+            }
+          }
+        },
+        createdBy: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
+        }
+      }
     });
 
-    // 2️⃣ Emit real-time notification to connected users
-    targetUserIds.forEach((userId) => {
-      // this.notificationsGateway.sendToUser(userId, 'new-notification', notification);
-    });
+    // Send real-time notification via WebSocket
+    // await this.notificationsGateway.sendNotificationToUsers(
+    //   recipientUserIds,
+    //   {
+    //     id: notification.id,
+    //     title: notification.title,
+    //     message: notification.message,
+    //     type: notification.type,
+    //     createdAt: notification.createdAt
+    //   }
+    // );
 
-    // 3️⃣ Notify other connected admins
-    // this.notificationsGateway.sendToAdmins('admin-notification', notification);
+    // // Also notify other admins
+    // this.notificationsGateway.notifyAdmins({
+    //   type: 'NEW_NOTIFICATION',
+    //   message: `New notification sent: ${title}`,
+    //   notificationId: notification.id,
+    //   timestamp: new Date()
+    // });
 
     return notification;
   }
 
-  /** Get notifications for a specific user */
+  /** ========================
+   * Get Stats
+   * ======================== */
+  async getStats() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const [
+      totalNotifications,
+      sentToday,
+      totalUsers,
+      residentsCount,
+      techniciansCount,
+      totalReceipts,
+      readReceipts
+    ] = await Promise.all([
+      this.prisma.notification.count(),
+      this.prisma.notification.count({
+        where: {
+          createdAt: {
+            gte: today,
+            lt: tomorrow
+          }
+        }
+      }),
+      this.prisma.user.count({
+        where: {
+          role: {
+            in: [Role.RESIDENT, Role.TECHNICIAN]
+          }
+        }
+      }),
+      this.prisma.user.count({ where: { role: Role.RESIDENT } }),
+      this.prisma.user.count({ where: { role: Role.TECHNICIAN } }),
+      this.prisma.notificationReceipt.count(),
+      this.prisma.notificationReceipt.count({
+        where: { status: ReceiptStatus.READ }
+      })
+    ]);
+
+    return {
+      total: totalNotifications,
+      unread: totalReceipts - readReceipts,
+      read: readReceipts,
+      sentToday,
+      totalUsers,
+      residentsCount,
+      techniciansCount
+    };
+  }
+
+  /** ========================
+   * Get User Notifications
+   * ======================== */
   async getUserNotifications(userId: number) {
-    return this.prisma.notificationReceipt.findMany({
+    const notificationReceipts = await this.prisma.notificationReceipt.findMany({
       where: { userId },
-      include: { notification: true },
-      orderBy: { notification: { createdAt: 'desc' } },
-      take: 50,
+      include: {
+        notification: {
+          include: {
+            createdBy: {
+              select: {
+                id: true,
+                name: true,
+                email: true
+              }
+            }
+          }
+        }
+      },
+      orderBy: {
+        notification: {
+          createdAt: 'desc'
+        }
+      }
     });
+
+    return notificationReceipts.map(receipt => ({
+      id: receipt.notification.id.toString(),
+      title: receipt.notification.title,
+      message: receipt.notification.message,
+      type: receipt.notification.type,
+      status: receipt.status.toLowerCase(), // Convert to lowercase for frontend
+      date: receipt.notification.createdAt.toISOString().slice(0, 10),
+      createdAt: receipt.notification.createdAt,
+      readAt: receipt.readAt
+    }));
   }
 
-  /** Mark a notification as read */
+  /** ========================
+   * Mark as Read
+   * ======================== */
   async markAsRead(userId: number, notificationId: number) {
-    const receipt = await this.prisma.notificationReceipt.findUnique({
-      where: { notificationId_userId: { notificationId, userId } },
-    });
-
-    if (!receipt) throw new NotFoundException('Notification not found for this user');
-
     return this.prisma.notificationReceipt.update({
-      where: { id: receipt.id },
-      data: { readAt: new Date() },
+      where: {
+        notificationId_userId: {
+          userId,
+          notificationId
+        }
+      },
+      data: {
+        status: ReceiptStatus.READ,
+        readAt: new Date(),
+        updatedAt: new Date()
+      }
     });
   }
 
-  /** Update a notification (admin only) */
+  /** ========================
+   * Update Notification
+   * ======================== */
   async update(notificationId: number, updateDto: UpdateNotificationDto) {
-    const notification = await this.prisma.notification.findUnique({
-      where: { id: notificationId },
-    });
-    if (!notification) throw new NotFoundException('Notification not found');
-
     return this.prisma.notification.update({
       where: { id: notificationId },
-      data: updateDto,
+      data: {
+        ...updateDto,
+        updatedAt: new Date()
+      }
     });
   }
 
-  /** Get statistics */
-  async getStats() {
-    const total = await this.prisma.notification.count();
-    const unread = await this.prisma.notificationReceipt.count({
-      where: { readAt: null },
+  /** ========================
+   * Get Unread Count for User
+   * ======================== */
+  async getUnreadCount(userId: number) {
+    return this.prisma.notificationReceipt.count({
+      where: {
+        userId,
+        status: ReceiptStatus.UNREAD
+      }
     });
-
-    return { total, unread };
   }
 }
