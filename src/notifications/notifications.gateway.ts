@@ -164,7 +164,12 @@ implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
   public sendToUser(userId: number, event: string, data: any): boolean {
     const socketId = this.connectedUsers.get(userId);
     if (socketId) {
-      this.server.to(socketId).emit(event, data);
+      // send in format that frontyed expects
+      const message = {
+        event: event,
+        data: data
+      }
+      this.server.to(socketId).emit('message', JSON.stringify(message));
       this.logger.log(` Sent ${event} to user ${userId}`);
       return true;
     }
@@ -172,20 +177,26 @@ implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
     return false;
   }
 
-//  public sendNotificationToUsers(recipientUserIds: number[], notification: any) {
-//   let sentCount = 0;
+ public sendNotificationToUsers(recipientUserIds: number[], notification: any) {
+  let sentCount = 0;
 
-//   recipientUserIds.forEach((userId) => {
-//     const socketId = this.connectedUsers.get(userId);
-//     if (socketId) {
-//       this.server.to(socketId).emit('new-notification', notification);
-//       sentCount++;
-//       this.logger.log(`Notification sent to user ${userId}`);
-//     }
-//   });
+  recipientUserIds.forEach((userId) => {
+    const socketId = this.connectedUsers.get(userId);
+    if (socketId) {
+      const message = {
+        event: 'new-notification',
+        data: notification
+      }
+      this.server.to(socketId).emit('message', JSON.stringify(message));
+      sentCount++;
+      this.logger.log(`Notification sent to user ${userId}`);
+    }
+  });
 
-//   return { success: true, sentCount };
-// }
+  this.logger.log(`Notification delivery: ${sentCount}/${recipientUserIds} users`)
+
+  return { success: true, sentCount };
+}
 
 
   public sendToAdmins(event: string, data: any) {
