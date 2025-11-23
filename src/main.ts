@@ -1,9 +1,18 @@
+// src/main.ts
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { IoAdapter } from '@nestjs/platform-socket.io';
+import { json, urlencoded } from 'express'; // Fixed imports
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-
+  
+  // Increase payload size limit for file uploads - CORRECTED
+  app.use(json({ limit: '50mb' }));
+  app.use(urlencoded({ extended: true, limit: '50mb' }));
+  
+  app.useWebSocketAdapter(new IoAdapter(app));
+  
   const allowedOrigins = [
     // Next.js development
     'http://localhost:3000',
@@ -26,6 +35,11 @@ async function bootstrap() {
     // Add IPv4 and IPv6 addresses
     'http://127.0.0.1:8081',
     'http://[::1]:8081',
+    
+    // Add your mobile device IPs
+    'http://192.168.1.4:8081',
+    'http://192.168.1.4:3000',
+    'http://192.168.1.4:19006',
   ];
 
   app.enableCors({
@@ -36,7 +50,8 @@ async function bootstrap() {
       // Allow all localhost origins for development (IPv4 and IPv6)
       if (origin.includes('localhost') || 
           origin.includes('127.0.0.1') || 
-          origin.includes('[::1]')) {
+          origin.includes('[::1]') ||
+          origin.includes('192.168.1.4')) { // Add your local network IP
         return callback(null, true);
       }
       
@@ -66,10 +81,12 @@ async function bootstrap() {
     maxAge: 86400, // 24 hours for preflight cache
   });
 
-  // ✅ FIX: Bind to all network interfaces including IPv4
+  // FIX: Bind to all network interfaces including IPv4
   await app.listen(process.env.PORT ?? 3000, '0.0.0.0');
   console.log(`Application is running on: http://localhost:${process.env.PORT ?? 3000}`);
   console.log(`Also accessible via: http://127.0.0.1:${process.env.PORT ?? 3000}`);
   console.log(`Also accessible via: http://[::1]:${process.env.PORT ?? 3000}`);
+  console.log(`Also accessible via: http://192.168.1.4:${process.env.PORT ?? 3000}`);
 }
+
 bootstrap();
