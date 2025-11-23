@@ -1,5 +1,5 @@
-import { IsString, IsEnum, IsOptional } from 'class-validator';
-import { Audience } from '@prisma/client';
+import { IsString, IsEnum, IsOptional, IsArray } from 'class-validator';
+import { Audience, NotificationType } from '@prisma/client';
 
 export class CreateNotificationDto {
   @IsString()
@@ -8,8 +8,15 @@ export class CreateNotificationDto {
   @IsString()
   message: string;
 
-  @IsEnum(Audience)
+  @IsEnum(NotificationType)
   @IsOptional()
-  audience?: Audience; // ALL | RESIDENT | TECHNICIAN
-  targetUserIds: never[];
+  type?: NotificationType; // GENERAL, SYSTEM, ALERT, UPDATE, REPORT
+
+  @IsEnum(Audience)
+  targetUserType: Audience; // ALL, RESIDENT, TECHNICIAN, SPECIFIC
+
+  @IsArray()
+  @IsOptional()
+  @IsString({ each: true })
+  specificUsers?: string[]; // Array of user IDs as strings
 }
