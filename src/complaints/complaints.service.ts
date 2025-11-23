@@ -41,11 +41,13 @@ export class ComplaintsService {
 
     try {
       const base64Data = photoUri.replace(/^data:image\/\w+;base64,/, '');
-      const result = await cloudinary.uploader.upload(
-        `data:image/jpeg;base64,${base64Data}`,
-        { folder: 'shega-report' }
-      );
-      return result.secure_url;
+      // const result = await cloudinary.uploader.upload(
+      //   `data:image/jpeg;base64,${base64Data}`,
+      //   { folder: 'shega-report' }
+      // );
+
+      return base64Data;
+      // return result.secure_url;
     } catch (error: any) {
       this.logger.error(`Cloudinary upload failed: ${error.message}`);
       return null;
@@ -84,9 +86,9 @@ export class ComplaintsService {
       }
 
       const photos: string[] = [];
-
       // Upload photos if provided
       if (dto.photos?.length) {
+        console.log("number of photor",dto.photos.length)
         this.logger.log(`Uploading ${dto.photos.length} photos for user ${userId}`);
         for (let i = 0; i < dto.photos.length; i++) {
           const url = await this.uploadPhoto(dto.photos[i]);
@@ -126,7 +128,7 @@ export class ComplaintsService {
           category: dto.category as ComplaintCategory,
           urgency: urgency,
           location: locationData,
-          photos,
+          photos:photos,
           status: ComplaintStatus.SUBMITTED,
         },
         include: {
