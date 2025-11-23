@@ -124,11 +124,13 @@ export class TechniciansController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.TECHNICIAN)
   async updateTaskStatus(
-    @Param('icomplaintIdd') complaintId: string,
+    @Param('complaintId') complaintId: string,
     @Body() body: { status: string; hoursWorked?: number; workDate?: string; note?: string },
     @Req() req,
   ) {
     const technician = await this.techniciansService.getTechnicianByUserId(req.user.id);
+
+    
     return this.techniciansService.updateTaskStatus(
       parseInt(complaintId), 
       technician.id, 
