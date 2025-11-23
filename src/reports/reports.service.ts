@@ -678,9 +678,9 @@ export class ReportsService {
 
     return Object.entries(monthlyData).map(([month, data]) => ({
       month,
-      total: data.total,
-      resolved: data.resolved,
-      resolutionRate: data.total > 0 ? Math.round((data.resolved / data.total) * 100) : 0,
+      total: (data as any).total,
+      resolved: (data as any).resolved,
+      resolutionRate: (data as any).total > 0 ? Math.round(((data as any).resolved / (data as any).total) * 100) : 0,
     }));
   }
 
@@ -708,9 +708,9 @@ export class ReportsService {
 
     return Object.entries(monthlyData).map(([month, data]) => ({
       month,
-      assigned: data.assigned,
-      completed: data.completed,
-      completionRate: data.assigned > 0 ? Math.round((data.completed / data.assigned) * 100) : 0,
+      assigned: (data as any).assigned,
+      completed: (data as any).completed,
+      completionRate: (data as any).assigned > 0 ? Math.round(((data as any).completed / (data as any).assigned) * 100) : 0,
     }));
   }
 
