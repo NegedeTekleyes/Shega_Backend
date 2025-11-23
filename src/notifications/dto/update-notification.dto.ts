@@ -1,5 +1,5 @@
 import { IsString, IsEnum, IsOptional } from 'class-validator';
-import { Audience } from '@prisma/client';
+import { Audience, NotificationType } from '@prisma/client';
 
 export class UpdateNotificationDto {
   @IsString()
@@ -10,7 +10,11 @@ export class UpdateNotificationDto {
   @IsOptional()
   message?: string;
 
+  @IsEnum(NotificationType)
+  @IsOptional()
+  type?: NotificationType;
+
   @IsEnum(Audience)
   @IsOptional()
-  audience?: Audience; // ALL | RESIDENT | TECHNICIAN
+  audience?: Audience;
 }
