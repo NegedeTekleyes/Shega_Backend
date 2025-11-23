@@ -199,8 +199,8 @@ export class ComplaintsController {
   }
 
   @Put(':id/status')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN, Role.TECHNICIAN)
+  @UseGuards(AdminApiKeyGuard)
+  @Roles(Role.ADMIN)
   async updateComplaintStatus(
     @Param('id') id: string,
     @Body() body: { status: ComplaintStatus; adminNotes?: string },

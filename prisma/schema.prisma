@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,44 +7,22 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id        Int      @id @default(autoincrement())
-  email     String   @unique
-  password  String
-  role      Role     @default(RESIDENT)
-  name      String?
-  phone     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  complaints Complaint[]
-  tasks      Task[] @relation("TechnicianTasks")
-}
-
 enum Role {
   RESIDENT
   ADMIN
   TECHNICIAN
 }
 
-model Complaint {
-  id          Int       @id @default(autoincrement())
-  userId      Int
-  title       String
-  description String
-  category    String
-  urgency     String
-  location    Json?      // store locationData as JSON
-  photos      String[]   // array of Cloudinary URLs
-  timestamp   DateTime
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-  task        Task?
-  user User @relation(fields: [userId], references: [id])
+enum ComplaintCategory {
+  WATER_LEAK
+  NO_WATER
+  DIRTY_WATER
+  SANITATION
+  PIPE_BURST
+  DRAINAGE
 }
 
-
-enum Status {
+enum ComplaintStatus {
   SUBMITTED
   ASSIGNED
   IN_PROGRESS
@@ -58,15 +30,234 @@ enum Status {
   REJECTED
 }
 
-model Task {
-  id                  Int      @id @default(autoincrement())
-  complaintId         Int      @unique
-  technicianId        Int
-  assignedAt          DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-  resolutionPhotoUrl  String?
-  resolutionNotes     String?
+enum TechnicianStatus {
+  ACTIVE
+  INACTIVE
+  ON_LEAVE
+}
 
-  complaint           Complaint @relation(fields: [complaintId], references: [id])
-  technician          User      @relation("TechnicianTasks", fields: [technicianId], references: [id])
+enum Speciality {
+  PLUMBING
+  ELECTRICAL
+  CLEANING
+  SECURITY
+  GENERAL
+  OTHER
+}
+
+enum EventType {
+  TECHNICIAN_VISIT
+  COMPLAINT_DEADLINE
+  ADMIN_MEETING
+  OTHER
+}
+
+enum EventStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum Audience {
+  ALL
+  RESIDENT
+  TECHNICIAN
+  SPECIFIC
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  EMERGENCY
+}
+
+enum ReportType {
+  COMPLAINT_SUMMARY
+  TECHNICIAN_PERFORMANCE
+  FINANCIAL_OVERVIEW
+  SYSTEM_ACTIVITY
+}
+
+enum NotificationType {
+  GENERAL
+  SYSTEM
+  ALERT
+  UPDATE
+  REPORT
+}
+
+enum ReceiptStatus {
+  UNREAD
+  READ
+}
+
+model Admin {
+  id        Int      @id @default(autoincrement())
+  name      String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int      @unique
+  
+  // Admin profile fields
+  role      String   @default("ADMIN")
+  department String?
+  bio       String?
+  avatar    String?
+  isActive  Boolean  @default(true)
+  lastLogin DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model User {
+  id               Int       @id @default(autoincrement())
+  email            String    @unique
+  password         String
+  resetToken       String?
+  resetTokenExpiry DateTime?
+  role             Role      @default(RESIDENT)
+  bio              String?
+  name             String?
+  phone            String?
+  avatar           String?
+  loginAttempts    Int       @default(0)
+  lastLoginAttempt DateTime?
+  lastLogin        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  // Relations
+  complaints            Complaint[]
+  technician            Technician?
+  admin                 Admin?
+  events                Event[]                @relation("UserEvents")
+  notificationReceipts  NotificationReceipt[]
+  createdNotifications  Notification[]
+  createdEvents         Event[]                @relation("EventCreator")
+  generatedReports      Report[]               @relation("ReportGenerator")
+  passwordResetAttempts PasswordResetAttempt[]
+}
+
+model PasswordResetAttempt {
+  id        Int      @id @default(autoincrement())
+  email     String
+  ipAddress String
+  createdAt DateTime @default(now())
+
+  userId Int?
+  user   User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
+
+model Complaint {
+  id                  Int               @id @default(autoincrement())
+  userId              Int
+  title               String
+  description         String
+  category            ComplaintCategory
+  urgency             Priority
+  location            Json?
+  photos              Json?
+  status              ComplaintStatus   @default(SUBMITTED)
+  timestamp           DateTime          @default(now())
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  assignedAt          DateTime?
+  resolvedAt          DateTime?
+  estimatedResolution DateTime?
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tasks Task[]
+}
+
+model Task {
+  id                 Int      @id @default(autoincrement())
+  complaintId        Int
+  technicianId       Int
+  assignedAt         DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  resolutionPhotoUrl String?
+  resolutionNotes    String?
+
+  complaint  Complaint  @relation(fields: [complaintId], references: [id], onDelete: Cascade)
+  technician Technician @relation(fields: [technicianId], references: [id], onDelete: Cascade)
+}
+
+model Technician {
+  id         Int              @id @default(autoincrement())
+  userId     Int              @unique
+  speciality Speciality?
+  status     TechnicianStatus @default(ACTIVE)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  events Event[] @relation("TechnicianEvents")
+  tasks  Task[]
+}
+
+model Event {
+  id             Int         @id @default(autoincrement())
+  title          String
+  description    String?
+  start          DateTime
+  end            DateTime
+  type           EventType
+  status         EventStatus @default(SCHEDULED)
+  recurrenceRule String?
+
+  createdById Int
+  createdBy   User @relation("EventCreator", fields: [createdById], references: [id], onDelete: Cascade)
+
+  technicianId Int?
+  technician   Technician? @relation("TechnicianEvents", fields: [technicianId], references: [id], onDelete: SetNull)
+
+  participants User[] @relation("UserEvents")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Notification {
+  id          Int               @id @default(autoincrement())
+  title       String
+  message     String
+  type        NotificationType  @default(GENERAL)
+  audience    Audience          @default(ALL)
+  createdById Int
+  createdBy   User              @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  receipts NotificationReceipt[]
+}
+
+model NotificationReceipt {
+  id             Int           @id @default(autoincrement())
+  notificationId Int
+  userId         Int
+  status         ReceiptStatus @default(UNREAD)
+  readAt         DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([notificationId, userId])
+  @@map("notification_receipts")
+}
+
+model Report {
+  id          Int        @id @default(autoincrement())
+  title       String
+  type        ReportType
+  filters     Json?
+  data        Json
+  generatedBy Int
+  generatedAt DateTime   @default(now())
+
+  generatedByUser User @relation("ReportGenerator", fields: [generatedBy], references: [id], onDelete: Cascade)
+
+  @@map("reports")
 }

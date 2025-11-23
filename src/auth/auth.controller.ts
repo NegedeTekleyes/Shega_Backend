@@ -18,14 +18,14 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto';
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  // 🔑 Signup
+  //  Signup
   @Post('signup')
   @UsePipes(new ValidationPipe({ whitelist: true }))
   async signup(@Body() signupDto: SignupDto) {
     return this.authService.signup(signupDto);
   }
 
-  // 🔑 Login
+  // Login
   @Post('login')
   @UsePipes(new ValidationPipe({ whitelist: true }))
   async login(@Body() loginDto: LoginDto) {
@@ -47,7 +47,7 @@ export class AuthController {
     };
     
   }
-  // 🔑 Verify JWT
+  //  Verify JWT
   @Post('verify')
   @UsePipes(new ValidationPipe({ whitelist: true }))
   async verify(@Body() verifyDto: VerifyDto) {

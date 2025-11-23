@@ -1,13 +1,14 @@
 // src/complaints/dto/create-complaint.dto.ts
 import { ComplaintCategory, Priority } from '@prisma/client';
-import { IsString, IsNotEmpty, IsOptional, IsArray, IsNumber, IsEnum } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsString, IsNotEmpty, IsOptional, IsArray, IsNumber, IsEnum, ValidateNested } from 'class-validator';
 
 export class LocationDataDto {
   @IsNumber()
-  latitude: number;
+  longitude: number;
 
   @IsNumber()
-  longitude: number;
+  latitude: number;
 
   @IsString()
   @IsOptional()
@@ -19,6 +20,9 @@ export class LocationDataDto {
 }
 
 export class CreateComplaintDto {
+  @IsNumber()
+  userId: number;
+
   @IsString()
   @IsNotEmpty()
   title: string;
@@ -34,10 +38,13 @@ export class CreateComplaintDto {
  urgency: Priority
 
   @IsOptional()
+  @ValidateNested()
+  @Type(() => LocationDataDto)
   locationData?: LocationDataDto;
 
   @IsArray()
   @IsOptional()
+  @IsString({each: true})
   photos?: string[];
 
   @IsOptional()

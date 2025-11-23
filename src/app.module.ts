@@ -9,6 +9,7 @@ import { UsersModule } from './users/users.module';
 import { ReportsModule } from './reports/reports.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { TechniciansModule } from './technician/technicians.module';
+import { NotificationsModule } from './notifications/notifications.module';
 @Module({
 
   imports: [
@@ -22,11 +23,12 @@ import { TechniciansModule } from './technician/technicians.module';
     ReportsModule,
     AnalyticsModule,
     TechniciansModule,
+    NotificationsModule,
   ],
   providers: [
     // provide: APP_GUARD,
     // useClass: JwtAuthGuard,
-  ComplaintsService
+  // ComplaintsService
 ],
   controllers: [ComplaintsController]
   
