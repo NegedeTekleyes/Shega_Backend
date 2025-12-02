@@ -27,13 +27,13 @@ import { RolesGuard } from 'src/auth/roles.guard'; // Add this import
 export class ComplaintsController {
   constructor(private readonly complaintsService: ComplaintsService) {}
 
-  // ==========================================================================
+ 
   // ADMIN ONLY ENDPOINTS
-  // ==========================================================================
+ 
 
   @Get()
-  @UseGuards(AdminApiKeyGuard) // Add proper guards
-  @Roles(Role.ADMIN) // Uncomment and use
+  @UseGuards(AdminApiKeyGuard) 
+  @Roles(Role.ADMIN) 
   async getAllComplaints(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
@@ -101,9 +101,9 @@ export class ComplaintsController {
     );
   }
 
-  // ==========================================================================
+ 
   // RESIDENT ENDPOINTS
-  // ==========================================================================
+ 
 
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -143,9 +143,9 @@ export class ComplaintsController {
     );
   }
 
-  // ==========================================================================
+ 
   // TECHNICIAN ENDPOINTS
-  // ==========================================================================
+ 
 
   @Get('assigned')
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -172,9 +172,9 @@ export class ComplaintsController {
     );
   }
 
-  // ==========================================================================
+ 
   // SHARED ENDPOINTS (Multiple roles)
-  // ==========================================================================
+ 
 
   @Get(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
