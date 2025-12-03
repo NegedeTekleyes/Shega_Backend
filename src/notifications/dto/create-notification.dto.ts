@@ -10,13 +10,13 @@ export class CreateNotificationDto {
 
   @IsEnum(NotificationType)
   @IsOptional()
-  type?: NotificationType; // GENERAL, SYSTEM, ALERT, UPDATE, REPORT
+  type?: NotificationType; 
 
   @IsEnum(Audience)
-  targetUserType: Audience; // ALL, RESIDENT, TECHNICIAN, SPECIFIC
+  targetUserType: Audience; 
 
   @IsArray()
   @IsOptional()
   @IsString({ each: true })
-  specificUsers?: string[]; // Array of user IDs as strings
+  specificUsers?: string[]; 
 }

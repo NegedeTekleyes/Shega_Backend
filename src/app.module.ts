@@ -3,13 +3,12 @@ import { PrismaModule } from './prisma/prisma.module';
 import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from './auth/auth.module';
 import { ComplaintsModule } from './complaints/complaints.module';
-import { ComplaintsService } from './complaints/complaints.service';
-import { ComplaintsController } from './complaints/complaints.controller';
 import { UsersModule } from './users/users.module';
 import { ReportsModule } from './reports/reports.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { TechniciansModule } from './technician/technicians.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { AdminModule } from './admin/admin.module';
 @Module({
 
   imports: [
@@ -18,6 +17,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     }),
     PrismaModule,
     AuthModule,
+    AdminModule,
     ComplaintsModule,
     UsersModule,
     ReportsModule,
@@ -25,12 +25,8 @@ import { NotificationsModule } from './notifications/notifications.module';
     TechniciansModule,
     NotificationsModule,
   ],
-  providers: [
-    // provide: APP_GUARD,
-    // useClass: JwtAuthGuard,
-  // ComplaintsService
-],
-  controllers: [ComplaintsController]
+  providers: [],
+  controllers: []
   
   
 })

@@ -5,9 +5,11 @@ import { NotificationsGateway } from './notifications.gateway';
 import { PrismaModule } from 'src/prisma/prisma.module';
 
 @Module({
-  imports: [PrismaModule], // <- use PrismaModule to get PrismaService
+  imports: [PrismaModule,
+    forwardRef(() => NotificationsModule)
+  ],
   controllers: [NotificationsController],
-  providers: [NotificationsService, NotificationsGateway], // <- remove PrismaService here
+  providers: [NotificationsService, NotificationsGateway],
   exports: [NotificationsService, NotificationsGateway],
 })
 export class NotificationsModule {}
