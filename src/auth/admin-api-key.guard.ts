@@ -1,3 +1,5 @@
+// src/auth/admin-api-key.guard.ts
+
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException, ForbiddenException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Role } from "@prisma/client";
@@ -9,15 +11,19 @@ export class AdminApiKeyGuard implements CanActivate {
     canActivate(context: ExecutionContext): boolean {
         const req = context.switchToHttp().getRequest();
         
-        // Case-insensitive header check
-        const apiKeyHeader = req.headers['x-admin-api-key'] || 
-                            req.headers['X-Admin-Api-Key'] ||
-                            req.headers['x-admin-key'] ||
-                            req.headers['X-Admin-Key'];
+        let apiKeyHeader = 
+            this.extractKeyFromAuthorization(req.headers['authorization']);
+                if (!apiKeyHeader) {
+            apiKeyHeader = 
+                req.headers['x-admin-api-key'] || 
+                req.headers['X-Admin-Api-Key'] ||
+                req.headers['x-admin-key'] ||
+                req.headers['X-Admin-Key'];
+        }
 
         const expectedApiKey = this.configService.get<string>('ADMIN_API_KEY');
         
-        // Check if API key is configured
+
         if (!expectedApiKey) {
             console.error('ADMIN_API_KEY is not configured in environment variables');
             throw new ForbiddenException('Admin API configuration error');
@@ -33,14 +39,31 @@ export class AdminApiKeyGuard implements CanActivate {
             throw new UnauthorizedException('Invalid admin API key');
         }
 
-        // Set admin user in request
+    
         req.user = {
-            id: 0, // or generate a unique admin ID
-            email: 'admin@system.com',
+            id: 11, 
+            email: 'shegadmin@gmail.com', 
             role: Role.ADMIN,
-            isAdmin: true, // additional flag for easy checking
+            isAdmin: true,
         };
 
         return true;
+    }
+
+
+    private extractKeyFromAuthorization(authHeader: string | undefined): string | null {
+        if (!authHeader || typeof authHeader !== 'string') {
+            return null;
+        }
+
+        const parts = authHeader.split(' ');
+        if (parts.length === 2 && parts[0].toLowerCase() === 'api-key') {
+            return parts[1];
+        }
+        if (parts.length === 2 && parts[0].toLowerCase() === 'bearer') {
+            return parts[1];
+        }
+
+        return null;
     }
 }
