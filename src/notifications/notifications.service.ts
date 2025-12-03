@@ -8,11 +8,12 @@ import { Audience, NotificationType, ReceiptStatus, Role } from '@prisma/client'
 
 @Injectable()
 export class NotificationsService {
-  constructor(
-    private readonly prisma: PrismaService,
-    @Inject(forwardRef(() => NotificationsGateway))
-    private readonly notificationsGateway: NotificationsGateway,
-  ) {}
+constructor(
+  private readonly prisma: PrismaService,
+  private readonly notificationsGateway: NotificationsGateway
+) {}
+
+
 
   /** ========================
    * Get All Notifications (Admin)
