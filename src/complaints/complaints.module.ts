@@ -5,9 +5,9 @@ import { ComplaintsService } from './complaints.service';
 import { AdminApiKeyGuard } from 'src/auth/admin-api-key.guard';
 
 @Module({
-  imports: [PrismaModule], // Import PrismaModule to get access to PrismaService
+  imports: [PrismaModule], 
   controllers: [ComplaintsController],
   providers: [ComplaintsService, AdminApiKeyGuard],
-  exports: [ComplaintsService], // Optional: export if needed by other modules
+  exports: [ComplaintsService], 
 })
 export class ComplaintsModule {}
