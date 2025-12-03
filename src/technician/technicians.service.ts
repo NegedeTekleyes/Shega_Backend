@@ -682,7 +682,7 @@ async getTaskDetail(complaintId: number, technicianId: number) {
     } : null,
   };
 
-  console.log(`✅ [Service] Returning task detail:`, result);
+  console.log(` [Service] Returning task detail:`, result);
   return result;
 }
   // Update task status by COMPLAINT ID - NEW METHOD
@@ -766,7 +766,7 @@ async getTaskDetail(complaintId: number, technicianId: number) {
       throw new NotFoundException(`Task with ID ${taskId} not found or you don't have access`);
     }
 
-    console.log(`✅ [Service] Found task ${taskId} for complaint ${task.complaintId}`);
+    console.log(` [Service] Found task ${taskId} for complaint ${task.complaintId}`);
 
     // Update both task and complaint status
     return await this.prisma.$transaction(async (tx) => {
@@ -796,7 +796,7 @@ async getTaskDetail(complaintId: number, technicianId: number) {
         data: updateData,
       });
 
-      console.log(`✅ [Service] Updated complaint ${task.complaintId} to status: ${status}`);
+      console.log(` [Service] Updated complaint ${task.complaintId} to status: ${status}`);
 
       return {
         task: updatedTask,

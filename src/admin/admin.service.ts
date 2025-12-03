@@ -87,7 +87,7 @@ export class AdminService {
   // NEW: GET LOGGED-IN ADMIN PROFILE
   async getProfile(userId: number) {
     // You can replace "1" with data from auth token
-    // const adminId = 11;
+    const adminId = 11;
 
     const admin = await this.prisma.admin.findUnique({
       where: { userId: userId },
