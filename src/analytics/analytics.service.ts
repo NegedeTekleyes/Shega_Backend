@@ -207,11 +207,8 @@ export class AnalyticsService {
     }));
   }
 
-  // Get top performing technicians
-  // Get top performing technicians
 async getTopTechnicians(limit: number = 3): Promise<TechnicianPerformance[]> {
   try {
-    // Get technicians with their tasks and complaint data
     const technicians = await this.prisma.technician.findMany({
       where: { status: 'ACTIVE' },
       include: {
@@ -283,12 +280,11 @@ async getTopTechnicians(limit: number = 3): Promise<TechnicianPerformance[]> {
 
     // Sort by completed tasks and return top performers
     return performanceData
-      .filter(tech => tech.completed > 0) // Only include technicians with completed tasks
+      .filter(tech => tech.completed > 0) 
       .sort((a, b) => b.completed - a.completed)
       .slice(0, limit);
   } catch (error) {
     console.error('Error in getTopTechnicians:', error);
-    // Return empty array instead of throwing to prevent breaking the dashboard
     return [];
   }
 }
