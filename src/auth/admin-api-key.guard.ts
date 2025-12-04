@@ -44,7 +44,7 @@ export class AdminApiKeyGuard implements CanActivate {
             id: 11, 
             email: 'shegadmin@gmail.com', 
             role: Role.ADMIN,
-            isAdmin: true,
+            // isAdmin: true,
         };
 
         return true;

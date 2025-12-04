@@ -149,7 +149,7 @@ constructor(
         title,
         message,
         type: type || NotificationType.GENERAL,
-        audience: targetUserType,
+        audience: targetUserType.toUpperCase() as Audience,
         createdById: adminId,
         receipts: {
           create: recipientUserIds.map(userId => ({
@@ -204,9 +204,8 @@ constructor(
     return notification;
   }
 
-  /** ========================
-   * Get Stats
-   * ======================== */
+   // Get Stats
+  
   async getStats() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -288,16 +287,14 @@ constructor(
       title: receipt.notification.title,
       message: receipt.notification.message,
       type: receipt.notification.type,
-      status: receipt.status.toLowerCase(), // Convert to lowercase for frontend
+      status: receipt.status.toLowerCase(), 
       date: receipt.notification.createdAt.toISOString().slice(0, 10),
       createdAt: receipt.notification.createdAt,
       readAt: receipt.readAt
     }));
   }
 
-  /** ========================
-   * Mark as Read
-   * ======================== */
+ 
   async markAsRead(userId: number, notificationId: number) {
     return this.prisma.notificationReceipt.update({
       where: {
@@ -314,9 +311,7 @@ constructor(
     });
   }
 
-  /** ========================
-   * Update Notification
-   * ======================== */
+  
   async update(notificationId: number, updateDto: UpdateNotificationDto) {
     return this.prisma.notification.update({
       where: { id: notificationId },
@@ -327,9 +322,7 @@ constructor(
     });
   }
 
-  /** ========================
-   * Get Unread Count for User
-   * ======================== */
+ 
   async getUnreadCount(userId: number) {
     return this.prisma.notificationReceipt.count({
       where: {
