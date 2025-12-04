@@ -76,7 +76,7 @@ export class NotificationsController {
       throw new UnauthorizedException('Invalid API key');
     }
 
-    const adminId = 2; // or fetch admin user via API key
+    const adminId = 11; // or fetch admin user via API key
     return this.notificationsService.create(createDto, adminId);
   }
 
@@ -108,14 +108,9 @@ export class NotificationsController {
   // USER ENDPOINTS (JWT Auth)
   // ========================
 
-  /** 
-   * USER: Fetch My Notifications (JWT Protected)
-   * React Native users use JWT tokens
-   */
   @Get('my-notifications')
-  @UseGuards(AuthGuard('jwt')) // ✅ Protect with JWT
+  @UseGuards(AuthGuard('jwt')) 
   async getMyNotifications(@Request() req: AuthenticatedRequest) {
-    // ✅ User ID comes from JWT token, not query params
     const userId = req.user.userId;
     
     console.log(`Fetching notifications for user ${userId} (from JWT)`);
@@ -132,7 +127,6 @@ export class NotificationsController {
     @Param('notificationId') notificationId: string,
     @Request() req: AuthenticatedRequest,
   ) {
-    // ✅ User ID comes from JWT token
     const userId = req.user.userId;
     
     return this.notificationsService.markAsRead(userId, Number(notificationId));
@@ -142,10 +136,6 @@ export class NotificationsController {
   // BACKWARD COMPATIBILITY
   // ========================
 
-  /**
-   * Legacy endpoint for backward compatibility
-   * (Remove this once all clients are updated)
-   */
   @Get('my-notifications-legacy')
   async getMyNotificationsLegacy(@Request() req) {
     const userId = Number(req.query.userId || req.headers['x-user-id']);
