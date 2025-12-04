@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcrypt';
 import { CreateAdminDto } from './dto/create-admin';
 import { UpdateAdminDto } from './dto/update-admin.dto';
+import { Role } from '@prisma/client';
 
 @Injectable()
 export class AdminService {
@@ -47,7 +48,7 @@ export class AdminService {
         email,
         phone,
         password: hashedPassword,
-        role: 'ADMIN',
+        role: Role.ADMIN,
       },
     });
 
@@ -113,7 +114,7 @@ export class AdminService {
     const adminCount = await this.prisma.admin.count();
     const userCount = await this.prisma.user.count();
     const technicians = await this.prisma.user.count({
-      where: { role: 'TECHNICIAN' },
+      where: { role: Role.TECHNICIAN },
     });
     const complaintsCount = await this.prisma.complaint.count();
 
