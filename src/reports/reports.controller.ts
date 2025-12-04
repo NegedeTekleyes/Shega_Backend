@@ -12,10 +12,10 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { ReportsService } from './reports.service';
-import { AdminApiKeyGuard } from '../auth/admin-api-key.guard'; // Import AdminApiKeyGuard
+import { AdminApiKeyGuard } from '../auth/admin-api-key.guard'; 
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
-import { Role } from '@prisma/client';
+import { ReportType, Role } from '@prisma/client';
 
 class GenerateReportDto {
   title: string;
@@ -24,26 +24,27 @@ class GenerateReportDto {
 }
 
 @Controller('reports')
-@UseGuards(AdminApiKeyGuard, RolesGuard) // Replace JwtAuthGuard with AdminApiKeyGuard
+@UseGuards(AdminApiKeyGuard, RolesGuard) 
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
 
   @Post('generate')
   @Roles(Role.ADMIN)
   async generateReport(@Body() generateReportDto: GenerateReportDto, @Request() req) {
-    const { title, type, filters } = generateReportDto;
+    const { title, type: typeFromDto, filters } = generateReportDto;
     const { startDate, endDate, technicianId } = filters;
 
     let reportData;
-    const userId = req.user?.id || 1; // Fallback to system user ID (e.g., 1) if no JWT
-
-    switch (type) {
+    let prismaType = req.user?.id
+    const userId = req.user?.id || 1; 
+    switch (typeFromDto) {
       case 'ANALYTICS':
         reportData = await this.reportsService.generateAnalyticsReport(
           new Date(startDate),
           new Date(endDate),
           userId,
         );
+        prismaType = ReportType.COMPLAINT_SUMMARY;
         break;
       case 'TECHNICIAN':
         reportData = await this.reportsService.generateTechnicianReport(
@@ -52,6 +53,7 @@ export class ReportsController {
           new Date(endDate),
           userId,
         );
+        prismaType = ReportType.TECHNICIAN_PERFORMANCE
         break;
       case 'FINANCIAL':
         reportData = await this.reportsService.generateFinancialReport(
@@ -59,6 +61,7 @@ export class ReportsController {
           new Date(endDate),
           userId,
         );
+        prismaType = ReportType.FINANCIAL_OVERVIEW
         break;
       default:
         throw new Error('Invalid report type');
@@ -66,10 +69,12 @@ export class ReportsController {
 
     const savedReport = await this.reportsService.saveReport({
       title,
-      type: type as any,
+      type: prismaType,
       filters,
       generatedBy: userId,
-    }, reportData);
+    }, 
+    reportData,
+  );
 
     return {
       ...savedReport,
@@ -127,15 +132,6 @@ export class ReportsController {
       1, 
     );
   }
-
-  // @Get('export/:id')
-  // @Roles(Role.ADMIN)
-  // async exportReport(
-  //   @Param('id',ParseIntPipe) id: number,
-  //   @Query('format') format: string,
-  // ) {
-  //   return this.reportsService.exportReport(id, format)
-  // }
   
 
   @Get('saved')
