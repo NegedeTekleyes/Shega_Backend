@@ -14,6 +14,10 @@ async function bootstrap() {
   app.useWebSocketAdapter(new IoAdapter(app));
   
   const allowedOrigins = [
+     'https://admin-dashboard-ewwb.vercel.app',
+
+         'https://*.vercel.app',
+
     // Next.js development
     'http://localhost:3000',
     'http://localhost:3001',
@@ -52,6 +56,10 @@ async function bootstrap() {
           origin.includes('127.0.0.1') || 
           origin.includes('[::1]') ||
           origin.includes('192.168.1.4')) { // Add your local network IP
+        return callback(null, true);
+      }
+
+        if (origin.includes('vercel.app')) {
         return callback(null, true);
       }
       
